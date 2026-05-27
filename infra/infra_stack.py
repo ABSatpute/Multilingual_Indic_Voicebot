@@ -10,6 +10,8 @@ from aws_cdk import (
     aws_elasticloadbalancingv2 as elbv2,
     aws_iam as iam,
     aws_logs as logs,
+    aws_cloudfront as cloudfront,
+    aws_cloudfront_origins as origins,
 )
 from constructs import Construct
 from aws_cdk.aws_ecr_assets import Platform
@@ -169,6 +171,37 @@ class InfraStack(Stack):
         CfnOutput(self, "WebSocketURL",
             value=f"ws://{nlb.load_balancer_dns_name}",
             description="WebSocket endpoint for Socket.io"
+        )
+
+        # ── CloudFront (HTTPS) ────────────────────────────────────────────
+        nlb_origin = origins.HttpOrigin(
+            nlb.load_balancer_dns_name,
+            protocol_policy=cloudfront.OriginProtocolPolicy.HTTP_ONLY
+        )
+        websocket_policy = cloudfront.OriginRequestPolicy(
+            self, "WSPolicy",
+            origin_request_policy_name=f"WSPolicy-{Stack.of(self).stack_name}",
+            header_behavior=cloudfront.OriginRequestHeaderBehavior.allow_list(
+                "Sec-WebSocket-Key", "Sec-WebSocket-Version",
+                "Sec-WebSocket-Protocol", "Sec-WebSocket-Accept"
+            ),
+            query_string_behavior=cloudfront.OriginRequestQueryStringBehavior.all(),
+            cookie_behavior=cloudfront.OriginRequestCookieBehavior.all()
+        )
+        distribution = cloudfront.Distribution(
+            self, "VoicebotDistribution",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=nlb_origin,
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                origin_request_policy=websocket_policy
+            ),
+            minimum_protocol_version=cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+        )
+        CfnOutput(self, "AppURL",
+            value=f"https://{distribution.distribution_domain_name}",
+            description="Voicebot HTTPS URL"
         )
 
         # ── CDK Nag suppressions ──────────────────────────────────────────
