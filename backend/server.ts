@@ -4,6 +4,7 @@ import path from 'path';
 import { Server } from 'socket.io';
 import { NovaSonicBidirectionalStreamClient, StreamSession } from './client';
 import { Buffer } from 'node:buffer';
+import { SarvamPipeline } from './SarvamPipeline';
 import { AWSConfig } from './consts';
 import { ExotelWebSocketHandler } from './exotelHandler';
 
@@ -46,6 +47,7 @@ const defaultClient = getClientForRegion(DEFAULT_REGION);
 
 // Track active sessions per socket
 const socketSessions = new Map<string, StreamSession>();
+const sarvamPipelines = new Map<string, SarvamPipeline>();
 const socketClients = new Map<string, NovaSonicBidirectionalStreamClient>();
 const socketConfigs = new Map<string, any>();
 
@@ -284,6 +286,16 @@ io.on('connection', (socket) => {
     // Audio input handler
     socket.on('audioInput', async (audioData) => {
         try {
+            // Route to Sarvam pipeline if active
+            const sarvam = sarvamPipelines.get(socket.id);
+            if (sarvam) {
+                const audioBuffer = typeof audioData === 'string'
+                    ? Buffer.from(audioData, 'base64')
+                    : Buffer.from(audioData);
+                await sarvam.processAudio(audioBuffer);
+                return;
+            }
+
             const session = socketSessions.get(socket.id);
             const currentState = sessionStates.get(socket.id);
 
@@ -391,6 +403,26 @@ io.on('connection', (socket) => {
         }
     });
 
+    // Sarvam pipeline start (for regional languages)
+    socket.on('sarvamStart', async (data: { language: string; systemPrompt: string }) => {
+        try {
+            const existing = sarvamPipelines.get(socket.id);
+            if (existing) { existing.stop(); sarvamPipelines.delete(socket.id); }
+            const pipeline = new SarvamPipeline(socket, data.language, data.systemPrompt);
+            sarvamPipelines.set(socket.id, pipeline);
+            await pipeline.start();
+        } catch (error) {
+            console.error('[Sarvam] Error starting pipeline:', error);
+            socket.emit('error', { message: 'Failed to start Sarvam pipeline', details: String(error) });
+        }
+    });
+
+    // Signal end of user audio turn for Sarvam (VAD replacement)
+    socket.on('sarvamAudioEnd', async () => {
+        const sarvam = sarvamPipelines.get(socket.id);
+        if (sarvam) await sarvam.endAudioTurn();
+    });
+
     // Text input handler (for typing mode)
     socket.on('textInput', async (data) => {
         try {
@@ -422,6 +454,17 @@ io.on('connection', (socket) => {
 
     socket.on('stopAudio', async () => {
         try {
+            // Stop Sarvam pipeline if active
+            const sarvam = sarvamPipelines.get(socket.id);
+            if (sarvam) {
+                // Process any remaining buffered audio before stopping
+                await sarvam.endAudioTurn();
+                sarvam.stop();
+                sarvamPipelines.delete(socket.id);
+                socket.emit('sessionClosed');
+                return;
+            }
+
             const session = socketSessions.get(socket.id);
             const client = socketClients.get(socket.id) || defaultClient;
             
@@ -482,6 +525,10 @@ io.on('connection', (socket) => {
     socket.on('disconnect', async () => {
         console.log('Client disconnected:', socket.id);
         clearInterval(connectionInterval);
+
+        // Clean up Sarvam pipeline if active
+        const sarvam = sarvamPipelines.get(socket.id);
+        if (sarvam) { sarvam.stop(); sarvamPipelines.delete(socket.id); }
 
         const session = socketSessions.get(socket.id);
         const client = socketClients.get(socket.id) || defaultClient;

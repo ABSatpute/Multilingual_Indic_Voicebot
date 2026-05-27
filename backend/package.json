@@ -12,6 +12,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "sarvamai": "^0.1.0",
     "@aws-sdk/client-bedrock-agent-runtime": "^3.782",
     "@aws-sdk/client-bedrock-runtime": "^3.956.0",
     "@aws-sdk/credential-providers": "^3.956.0",

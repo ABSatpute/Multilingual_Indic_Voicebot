@@ -108,6 +108,7 @@ class InfraStack(Stack):
                 "KB_REGION":               kb_region,
                 "KB_KNOWLEDGE_BASE_ID":    kb_id,
                 "KB_MODEL_ARN":            kb_model_arn,
+                "SARVAM_API_KEY":          self.node.try_get_context("sarvam_api_key") or "",
                 "PORT":                    "3000",
                 "HOST":                    "0.0.0.0",
             },

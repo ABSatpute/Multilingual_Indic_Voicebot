@@ -4,6 +4,10 @@ import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 // Connect to the server
 const socket = io();
 
+// Languages that use Sarvam AI pipeline
+const SARVAM_LANGUAGES = new Set(['tamil','telugu','kannada','bengali','malayalam','marathi','gujarati','punjabi','odia','assamese']);
+function isSarvamLanguage(lang) { return SARVAM_LANGUAGES.has(lang); }
+
 // DOM elements
 const voiceBtn = document.getElementById('voice-btn');
 const micIcon = voiceBtn.querySelector('.mic-icon');
@@ -91,9 +95,10 @@ const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
 
 // Configuration state (defaults loaded from server)
 let config = {
-    awsRegion: 'ap-northeast-1',
+    awsRegion: 'us-east-1',
     systemPrompt: '',
     voiceId: 'kiara',
+    language: 'english',
     responseTiming: 'medium',
     outputSampleRate: 24000,
     audioBufferMs: 200,
@@ -356,6 +361,9 @@ async function loadPromptPreset(presetName) {
 
 function updateConfigFromSelect(selectId, value) {
     switch (selectId) {
+        case 'language-select':
+            config.language = value;
+            break;
         case 'aws-region':
             config.awsRegion = value;
             break;
@@ -1015,6 +1023,14 @@ async function startStreaming() {
             await initializeSession();
         }
 
+        // Start Sarvam pipeline for regional languages
+        if (isSarvamLanguage(config.language)) {
+            socket.emit('sarvamStart', {
+                language: config.language,
+                systemPrompt: config.systemPrompt
+            });
+        }
+
         sourceNode = audioContext.createMediaStreamSource(audioStream);
 
         if (audioContext.createScriptProcessor) {
@@ -1046,7 +1062,11 @@ async function startStreaming() {
                 }
 
                 const base64Data = arrayBufferToBase64(pcmData.buffer);
-                socket.emit('audioInput', base64Data);
+                if (isSarvamLanguage(config.language)) {
+                    socket.emit('audioInput', base64Data); // Sarvam also uses audioInput
+                } else {
+                    socket.emit('audioInput', base64Data);
+                }
             };
 
             sourceNode.connect(processor);
