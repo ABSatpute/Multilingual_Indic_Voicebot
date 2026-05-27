@@ -110,15 +110,12 @@ export class SarvamPipeline {
     }
 
     private async transcribe(audio: Buffer): Promise<string> {
-        const base64Audio = audio.toString('base64');
-
-        const response = await this.sarvam.speechToText.transcribe({
+        const response = await (this.sarvam.speechToText as any).transcribe({
             file: new Blob([audio], { type: 'audio/wav' }),
             model: 'saaras:v3',
             languageCode: this.languageCode,
         });
-
-        return (response as any).transcript || '';
+        return response?.transcript || '';
     }
 
     private async getLLMResponse(userText: string): Promise<string> {
@@ -146,7 +143,7 @@ export class SarvamPipeline {
     private async speakText(text: string): Promise<void> {
         const speaker = LANGUAGE_SPEAKERS[this.languageCode] || 'shubh';
 
-        const response = await this.sarvam.textToSpeech.convert({
+        const response = await (this.sarvam.textToSpeech as any).convert({
             inputs: [text],
             target_language_code: this.languageCode,
             speaker,
