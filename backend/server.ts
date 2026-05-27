@@ -525,10 +525,10 @@ io.on('connection', (socket) => {
     });
 });
 
+// Serve static files from the public directory
+app.use(express.static(path.join(process.cwd(), 'public')));
+
 // Get available tools endpoint
-app.get('/', (_req, res) => {
-    res.status(200).json({status: 'ok'});
-});
 app.get('/api/tools', (_req, res) => {
     const client = getClientForRegion(DEFAULT_REGION);
     const toolSpecs = client.getToolRegistry().getToolSpecs();
