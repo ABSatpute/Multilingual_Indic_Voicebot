@@ -75,6 +75,13 @@ class InfraStack(Stack):
                 resources=[f"arn:aws:bedrock:{kb_region}:{account}:knowledge-base/{kb_id}"]
             )
         )
+        # Allow GetInferenceProfile for Nova Micro inference profile
+        task_definition.add_to_task_role_policy(
+            iam.PolicyStatement(
+                actions=["bedrock:GetInferenceProfile", "bedrock:ListInferenceProfiles"],
+                resources=[f"arn:aws:bedrock:{kb_region}:{account}:inference-profile/*"]
+            )
+        )
 
         # CloudWatch logs
         log_group = logs.LogGroup(
