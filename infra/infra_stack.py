@@ -199,7 +199,7 @@ class InfraStack(Stack):
             ),
             minimum_protocol_version=cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
         )
-        CfnOutput(self, "AppURL",
+        CfnOutput(self, "CloudFrontURL",
             value=f"https://{distribution.distribution_domain_name}",
             description="Voicebot HTTPS URL"
         )
