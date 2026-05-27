@@ -232,3 +232,13 @@ class InfraStack(Stack):
             f'/{self.stack_name}/VoicebotNLBSG/Resource',
             [{'id': 'AwsSolutions-EC23', 'reason': 'NLB open to internet for demo access.'}]
         )
+        cdk_nag.NagSuppressions.add_resource_suppressions_by_path(self,
+            f'/{self.stack_name}/VoicebotDistribution/Resource',
+            [
+                {'id': 'AwsSolutions-CFR1', 'reason': 'Geo restriction not required for demo.'},
+                {'id': 'AwsSolutions-CFR2', 'reason': 'WAF not required for demo.'},
+                {'id': 'AwsSolutions-CFR3', 'reason': 'Access logging not required for demo.'},
+                {'id': 'AwsSolutions-CFR4', 'reason': 'Default CF cert uses TLS1.2 minimum already set.'},
+                {'id': 'AwsSolutions-CFR5', 'reason': 'HTTP_ONLY to NLB acceptable within AWS network.'},
+            ]
+        )
