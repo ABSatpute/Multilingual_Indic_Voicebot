@@ -4,53 +4,25 @@
 !.env.example
 *.pem
 *.key
-secrets/
-.secrets/
 
 # AWS
-.aws/
 cdk.out/
 cdk.context.json
 
-# Python
-__pycache__/
-*.py[cod]
-*.pyo
-.venv/
-venv/
-env/
-*.egg-info/
-dist/
-build/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-htmlcov/
-.coverage
+# TypeScript build output
+backend/dist/
+backend/node_modules/
 
-# Node / Frontend
-node_modules/
-frontend/dist/
-frontend/build/
-*.log
-npm-debug.log*
-
-# Docker
-*.tar
+# Python (CDK)
+infra/.venv/
+infra/__pycache__/
+**/__pycache__/
+*.pyc
 
 # OS
 .DS_Store
 Thumbs.db
-desktop.ini
 
 # IDE
 .vscode/
 .idea/
-*.swp
-*.swo
-
-# Pre-commit
-.pre-commit-cache/
-
-# Detect-secrets baseline (keep this, it's not a secret)
-!.secrets.baseline

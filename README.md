@@ -26,16 +26,13 @@ ECS Fargate (FastAPI + Pipecat)
 
 | Layer | Technology |
 |---|---|
-| Voice pipeline | [Pipecat](https://github.com/pipecat-ai/pipecat) + FastAPI |
-| Speech-to-speech | Amazon Bedrock Nova Sonic 2 |
-| LLM | Amazon Bedrock Nova Pro / Nova Lite |
-| STT / TTS (Indic) | [Smallest.ai](https://smallest.ai) |
-| RAG | Amazon Bedrock Knowledge Base + Titan Embeddings V2 |
-| Frontend | React + WebSocket + AudioWorklet |
-| Auth | Amazon Cognito |
+| Voice pipeline | Amazon Bedrock Nova Sonic 2 (direct bidirectional streaming) |
+| Speech-to-speech | Amazon Bedrock Nova Sonic 2 (us-east-1) |
+| RAG | Amazon Bedrock Knowledge Base + Nova Micro (ap-south-1) |
+| Backend | TypeScript + Express + Socket.io |
 | Infrastructure | AWS CDK (Python) |
 | Compute | ECS Fargate |
-| CDN | CloudFront + S3 |
+| Load Balancer | NLB (WebSocket + HTTP) |
 
 ## Supported Languages
 

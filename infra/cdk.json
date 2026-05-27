@@ -1,5 +1,5 @@
 {
-    "app": "bash -c 'cd ../frontend && npm run build && cd ../infra && python3 app.py'",
+    "app": "python3 app.py",
     "watch": {
         "include": [
             "**"
@@ -96,7 +96,7 @@
         "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
         "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,
         "knowledgebase": "HN2QJNTWYX",
-        "llm_model": "apac.amazon.nova-lite-v1:0",
-        "secret_name": "sarvam_key"
+        "kb_region": "ap-south-1",
+        "kb_model_arn": "arn:aws:bedrock:ap-south-1:417780655467:inference-profile/apac.amazon.nova-micro-v1:0"
     }
 }
