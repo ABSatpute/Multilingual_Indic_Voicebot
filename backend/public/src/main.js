@@ -2,7 +2,7 @@ import { AudioPlayer } from './lib/play/AudioPlayer.js';
 import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 
 // Connect to the server
-const socket = io();
+const socket = io({ transports: ["websocket"], upgrade: false });
 
 // Clear old config that has wrong region defaults
 const savedConfig = localStorage.getItem('novaSonicConfig');
