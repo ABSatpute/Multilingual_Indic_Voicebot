@@ -205,6 +205,15 @@ class InfraStack(Stack):
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
                 origin_request_policy=websocket_policy
             ),
+            additional_behaviors={
+                "/socket.io/*": cloudfront.BehaviorOptions(
+                    origin=nlb_origin,
+                    viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                    cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
+                    allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
+                    origin_request_policy=websocket_policy
+                )
+            },
             minimum_protocol_version=cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
         )
         CfnOutput(self, "CloudFrontURL",
