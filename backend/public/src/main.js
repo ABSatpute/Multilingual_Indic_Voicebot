@@ -97,7 +97,7 @@ const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
 let config = {
     awsRegion: 'us-east-1',
     systemPrompt: '',
-    voiceId: 'kiara',
+    voiceId: 'priya',
     responseTiming: 'medium',
     outputSampleRate: 24000,
     audioBufferMs: 200,
@@ -1935,7 +1935,7 @@ socket.on('toolResult', (data) => {
 });
 
 socket.on('sarvamReady', () => { console.log('[Sarvam] Ready'); });
-socket.on('sarvamDone', () => { console.log('[Sarvam] Done'); window._sarvamSpeaking = false; });
+socket.on('sarvamDone', () => { console.log('[Sarvam] Done'); window._sarvamSpeaking = false; setSettingsDisabled(false); });
 
 socket.on('streamComplete', () => {
     if (isStreaming) stopStreaming();
