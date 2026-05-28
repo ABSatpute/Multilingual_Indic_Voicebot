@@ -5,7 +5,7 @@
 const DEFAULT_CONFIG = {
     awsRegion: 'us-east-1',
     systemPrompt: '',
-    voiceId: 'kiara',
+    voiceId: 'priya',
     language: 'english',
     responseTiming: 'medium',
     outputSampleRate: 24000,
