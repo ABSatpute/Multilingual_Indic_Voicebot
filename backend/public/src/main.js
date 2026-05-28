@@ -4,7 +4,7 @@ import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 // Connect to the server
 // Clear stale config
 const _saved = localStorage.getItem('novaSonicConfig'); if (_saved) { try { const _p = JSON.parse(_saved); if (_p.awsRegion === 'ap-northeast-1') localStorage.removeItem('novaSonicConfig'); } catch(e) {} }
-const socket = io({ transports: ["websocket"], upgrade: false });
+const socket = io();
 const SARVAM_LANGUAGES = new Set(["tamil","telugu","kannada","bengali","malayalam","marathi","gujarati","punjabi","odia","assamese"]);
 function isSarvamLanguage(lang) { return SARVAM_LANGUAGES.has(lang); }
 
