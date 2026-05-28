@@ -1030,9 +1030,13 @@ async function startStreaming() {
             await audioPlayer.start(config.outputSampleRate, config.audioBufferMs);
         }
 
-        if (!sessionInitialized) {
-            await initializeSession();
-        }
+        // Always use unified pipeline (auto-detects language)
+        socket.emit('sarvamStart', { language: 'auto', systemPrompt: config.systemPrompt });
+        await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
+            socket.once('sarvamReady', () => { clearTimeout(timeout); resolve(); });
+            socket.once('error', (e) => { clearTimeout(timeout); reject(new Error(e.details || e.message)); });
+        });
 
         sourceNode = audioContext.createMediaStreamSource(audioStream);
 
@@ -1066,6 +1070,19 @@ async function startStreaming() {
 
                 const base64Data = arrayBufferToBase64(pcmData.buffer);
                 socket.emit('audioInput', base64Data);
+
+                // Sarvam VAD: trigger processing after 800ms silence
+                if (isSarvamLanguage(config.language)) {
+                    clearTimeout(window._sarvamSilenceTimer);
+                    if (rms > 0.01) {
+                        window._sarvamSpeaking = true;
+                    } else if (window._sarvamSpeaking) {
+                        window._sarvamSilenceTimer = setTimeout(() => {
+                            window._sarvamSpeaking = false;
+                            socket.emit('sarvamAudioEnd');
+                        }, 800);
+                    }
+                }
             };
 
             sourceNode.connect(processor);

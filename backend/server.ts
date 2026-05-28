@@ -4,7 +4,7 @@ import path from 'path';
 import { Server } from 'socket.io';
 import { NovaSonicBidirectionalStreamClient, StreamSession } from './client';
 import { Buffer } from 'node:buffer';
-import { SarvamPipeline } from './SarvamPipeline';
+import { UnifiedPipeline } from './SarvamPipeline';
 import { AWSConfig } from './consts';
 import { ExotelWebSocketHandler } from './exotelHandler';
 
@@ -47,7 +47,7 @@ const defaultClient = getClientForRegion(DEFAULT_REGION);
 
 // Track active sessions per socket
 const socketSessions = new Map<string, StreamSession>();
-const sarvamPipelines = new Map<string, SarvamPipeline>();
+const sarvamPipelines = new Map<string, UnifiedPipeline>();
 const socketClients = new Map<string, NovaSonicBidirectionalStreamClient>();
 const socketConfigs = new Map<string, any>();
 
@@ -408,7 +408,7 @@ io.on('connection', (socket) => {
         try {
             const existing = sarvamPipelines.get(socket.id);
             if (existing) { existing.stop(); sarvamPipelines.delete(socket.id); }
-            const pipeline = new SarvamPipeline(socket, data.language, data.systemPrompt);
+            const pipeline = new UnifiedPipeline(socket, data.systemPrompt);
             sarvamPipelines.set(socket.id, pipeline);
             await pipeline.start();
         } catch (error) {
