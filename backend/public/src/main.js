@@ -1075,10 +1075,19 @@ async function startStreaming() {
                 }
 
                 const base64Data = arrayBufferToBase64(pcmData.buffer);
+                socket.emit('audioInput', base64Data);
+
+                // Sarvam VAD: detect silence and trigger processing
                 if (isSarvamLanguage(config.language)) {
-                    socket.emit('audioInput', base64Data); // Sarvam also uses audioInput
-                } else {
-                    socket.emit('audioInput', base64Data);
+                    clearTimeout(window._sarvamSilenceTimer);
+                    if (rms > 0.01) { // user is speaking
+                        window._sarvamSpeaking = true;
+                    } else if (window._sarvamSpeaking) { // silence after speech
+                        window._sarvamSilenceTimer = setTimeout(() => {
+                            window._sarvamSpeaking = false;
+                            socket.emit('sarvamAudioEnd');
+                        }, 800); // 800ms silence = end of turn
+                    }
                 }
             };
 
@@ -1941,6 +1950,18 @@ socket.on('toolResult', (data) => {
 
 socket.on('streamComplete', () => {
     if (isStreaming) stopStreaming();
+});
+
+// Sarvam pipeline events
+socket.on('sarvamReady', () => {
+    console.log('[Sarvam] Pipeline ready');
+    // Settings stay disabled during conversation - re-enable on stop
+});
+
+socket.on('sarvamDone', () => {
+    console.log('[Sarvam] Response complete');
+    // Re-enable mic for next turn (don't stop streaming)
+    window._sarvamSpeaking = false;
 });
 
 socket.on('streamInterrupted', (data) => {

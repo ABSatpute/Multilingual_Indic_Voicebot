@@ -161,6 +161,7 @@ export class SarvamPipeline {
                 this.socket.emit('audioOutput', { data: chunk.toString('base64') });
             }
             this.socket.emit('contentEnd', { type: 'AUDIO' });
+            this.socket.emit('sarvamDone');
         }
     }
 
