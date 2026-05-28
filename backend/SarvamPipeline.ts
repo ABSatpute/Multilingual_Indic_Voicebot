@@ -113,7 +113,7 @@ export class SarvamPipeline {
         const response = await (this.sarvam.speechToText as any).transcribe({
             file: new Blob([audio], { type: 'audio/wav' }),
             model: 'saaras:v3',
-            languageCode: this.languageCode,
+            languageCode: 'unknown', // auto-detect language
         });
         return response?.transcript || '';
     }

@@ -4,6 +4,17 @@ import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 // Connect to the server
 const socket = io();
 
+// Clear old config that has wrong region defaults
+const savedConfig = localStorage.getItem('novaSonicConfig');
+if (savedConfig) {
+    try {
+        const parsed = JSON.parse(savedConfig);
+        if (parsed.awsRegion === 'ap-northeast-1') {
+            localStorage.removeItem('novaSonicConfig');
+        }
+    } catch(e) { localStorage.removeItem('novaSonicConfig'); }
+}
+
 // Languages that use Sarvam AI pipeline
 const SARVAM_LANGUAGES = new Set(['tamil','telugu','kannada','bengali','malayalam','marathi','gujarati','punjabi','odia','assamese']);
 function isSarvamLanguage(lang) { return SARVAM_LANGUAGES.has(lang); }
@@ -1020,7 +1031,9 @@ async function startStreaming() {
         }
 
         if (!sessionInitialized) {
-            await initializeSession();
+            if (!isSarvamLanguage(config.language)) {
+                await initializeSession();
+            }
         }
 
         // Start Sarvam pipeline for regional languages
