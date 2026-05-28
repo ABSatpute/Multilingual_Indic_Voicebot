@@ -74,12 +74,12 @@ export class UnifiedPipeline {
 
     private async speak(text: string, lang: string): Promise<void> {
         const res = await (this.sarvam.textToSpeech as any).convert({
-            inputs: [text], target_language_code: lang, speaker: 'anand', model: 'bulbul:v3',
+            inputs: [text], target_language_code: lang, speaker: 'anand', model: 'bulbul:v3', output_audio_format: 'pcm',
         });
         if (res?.audios?.[0]) {
             const buf = Buffer.from(res.audios[0], 'base64');
             for (let i = 0; i < buf.length; i += 4096)
-                this.socket.emit('audioOutput', { data: buf.slice(i, i + 4096).toString('base64') });
+                this.socket.emit('audioOutput', { content: buf.slice(i, i + 4096).toString('base64') });
             this.socket.emit('contentEnd', { type: 'AUDIO' });
             this.socket.emit('sarvamDone');
         }
