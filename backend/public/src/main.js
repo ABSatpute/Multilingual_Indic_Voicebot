@@ -1031,17 +1031,7 @@ async function startStreaming() {
         }
 
         if (!sessionInitialized) {
-            if (!isSarvamLanguage(config.language)) {
-                await initializeSession();
-            }
-        }
-
-        // Start Sarvam pipeline for regional languages
-        if (isSarvamLanguage(config.language)) {
-            socket.emit('sarvamStart', {
-                language: config.language,
-                systemPrompt: config.systemPrompt
-            });
+            await initializeSession();
         }
 
         sourceNode = audioContext.createMediaStreamSource(audioStream);
@@ -1076,19 +1066,6 @@ async function startStreaming() {
 
                 const base64Data = arrayBufferToBase64(pcmData.buffer);
                 socket.emit('audioInput', base64Data);
-
-                // Sarvam VAD: detect silence and trigger processing
-                if (isSarvamLanguage(config.language)) {
-                    clearTimeout(window._sarvamSilenceTimer);
-                    if (rms > 0.01) { // user is speaking
-                        window._sarvamSpeaking = true;
-                    } else if (window._sarvamSpeaking) { // silence after speech
-                        window._sarvamSilenceTimer = setTimeout(() => {
-                            window._sarvamSpeaking = false;
-                            socket.emit('sarvamAudioEnd');
-                        }, 800); // 800ms silence = end of turn
-                    }
-                }
             };
 
             sourceNode.connect(processor);
