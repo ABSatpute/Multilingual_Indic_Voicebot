@@ -2,21 +2,10 @@ import { AudioPlayer } from './lib/play/AudioPlayer.js';
 import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 
 // Connect to the server
+// Clear stale config
+const _saved = localStorage.getItem('novaSonicConfig'); if (_saved) { try { const _p = JSON.parse(_saved); if (_p.awsRegion === 'ap-northeast-1') localStorage.removeItem('novaSonicConfig'); } catch(e) {} }
 const socket = io({ transports: ["websocket"], upgrade: false });
-
-// Clear old config that has wrong region defaults
-const savedConfig = localStorage.getItem('novaSonicConfig');
-if (savedConfig) {
-    try {
-        const parsed = JSON.parse(savedConfig);
-        if (parsed.awsRegion === 'ap-northeast-1') {
-            localStorage.removeItem('novaSonicConfig');
-        }
-    } catch(e) { localStorage.removeItem('novaSonicConfig'); }
-}
-
-// Languages that use Sarvam AI pipeline
-const SARVAM_LANGUAGES = new Set(['tamil','telugu','kannada','bengali','malayalam','marathi','gujarati','punjabi','odia','assamese']);
+const SARVAM_LANGUAGES = new Set(["tamil","telugu","kannada","bengali","malayalam","marathi","gujarati","punjabi","odia","assamese"]);
 function isSarvamLanguage(lang) { return SARVAM_LANGUAGES.has(lang); }
 
 // DOM elements
@@ -108,8 +97,7 @@ const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
 let config = {
     awsRegion: 'us-east-1',
     systemPrompt: '',
-    voiceId: 'priya',
-    language: 'english',
+    voiceId: 'kiara',
     responseTiming: 'medium',
     outputSampleRate: 24000,
     audioBufferMs: 200,
@@ -372,9 +360,6 @@ async function loadPromptPreset(presetName) {
 
 function updateConfigFromSelect(selectId, value) {
     switch (selectId) {
-        case 'language-select':
-            config.language = value;
-            break;
         case 'aws-region':
             config.awsRegion = value;
             break;
@@ -1030,17 +1015,21 @@ async function startStreaming() {
             await audioPlayer.start(config.outputSampleRate, config.audioBufferMs);
         }
 
-        // Always use unified pipeline (auto-detects language)
-        // Ensure system prompt is loaded
-        if (!config.systemPrompt || !config.systemPrompt.trim()) {
-            await loadPromptPreset('default');
+        if (!sessionInitialized) {
+            if (!isSarvamLanguage(config.language)) {
+                await initializeSession();
+            } else {
+                if (!config.systemPrompt || !config.systemPrompt.trim()) {
+                    await loadPromptPreset('default');
+                }
+                socket.emit('sarvamStart', { language: config.language, systemPrompt: config.systemPrompt, voiceId: config.voiceId });
+                await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
+                    socket.once('sarvamReady', () => { clearTimeout(timeout); resolve(); });
+                    socket.once('error', (e) => { clearTimeout(timeout); reject(new Error(e.details || e.message)); });
+                });
+            }
         }
-        socket.emit('sarvamStart', { language: 'auto', systemPrompt: config.systemPrompt, voiceId: config.voiceId });
-        await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
-            socket.once('sarvamReady', () => { clearTimeout(timeout); resolve(); });
-            socket.once('error', (e) => { clearTimeout(timeout); reject(new Error(e.details || e.message)); });
-        });
 
         sourceNode = audioContext.createMediaStreamSource(audioStream);
 
@@ -1075,13 +1064,12 @@ async function startStreaming() {
                 const base64Data = arrayBufferToBase64(pcmData.buffer);
                 socket.emit('audioInput', base64Data);
 
-                // Sarvam VAD: trigger processing after 800ms silence
+                // Sarvam VAD: trigger after 800ms silence
                 if (isSarvamLanguage(config.language)) {
-                    clearTimeout(window._sarvamSilenceTimer);
-                    if (rms > 0.01) {
-                        window._sarvamSpeaking = true;
-                    } else if (window._sarvamSpeaking) {
-                        window._sarvamSilenceTimer = setTimeout(() => {
+                    clearTimeout(window._sarvamTimer);
+                    if (rms > 0.01) { window._sarvamSpeaking = true; }
+                    else if (window._sarvamSpeaking) {
+                        window._sarvamTimer = setTimeout(() => {
                             window._sarvamSpeaking = false;
                             socket.emit('sarvamAudioEnd');
                         }, 800);
@@ -1946,20 +1934,11 @@ socket.on('toolResult', (data) => {
     showAssistantThinkingIndicator();
 });
 
+socket.on('sarvamReady', () => { console.log('[Sarvam] Ready'); });
+socket.on('sarvamDone', () => { console.log('[Sarvam] Done'); window._sarvamSpeaking = false; });
+
 socket.on('streamComplete', () => {
     if (isStreaming) stopStreaming();
-});
-
-// Sarvam pipeline events
-socket.on('sarvamReady', () => {
-    console.log('[Sarvam] Pipeline ready');
-    // Settings stay disabled during conversation - re-enable on stop
-});
-
-socket.on('sarvamDone', () => {
-    console.log('[Sarvam] Response complete');
-    // Re-enable mic for next turn (don't stop streaming)
-    window._sarvamSpeaking = false;
 });
 
 socket.on('streamInterrupted', (data) => {
