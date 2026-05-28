@@ -1031,7 +1031,11 @@ async function startStreaming() {
         }
 
         // Always use unified pipeline (auto-detects language)
-        socket.emit('sarvamStart', { language: 'auto', systemPrompt: config.systemPrompt });
+        // Ensure system prompt is loaded
+        if (!config.systemPrompt || !config.systemPrompt.trim()) {
+            await loadPromptPreset('default');
+        }
+        socket.emit('sarvamStart', { language: 'auto', systemPrompt: config.systemPrompt, voiceId: config.voiceId });
         await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
             socket.once('sarvamReady', () => { clearTimeout(timeout); resolve(); });

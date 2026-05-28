@@ -404,11 +404,11 @@ io.on('connection', (socket) => {
     });
 
     // Sarvam pipeline start (for regional languages)
-    socket.on('sarvamStart', async (data: { language: string; systemPrompt: string }) => {
+    socket.on('sarvamStart', async (data: { language: string; systemPrompt: string; voiceId?: string }) => {
         try {
             const existing = sarvamPipelines.get(socket.id);
             if (existing) { existing.stop(); sarvamPipelines.delete(socket.id); }
-            const pipeline = new UnifiedPipeline(socket, data.systemPrompt);
+            const pipeline = new UnifiedPipeline(socket, data.systemPrompt, data.voiceId || 'anand');
             sarvamPipelines.set(socket.id, pipeline);
             await pipeline.start();
         } catch (error) {

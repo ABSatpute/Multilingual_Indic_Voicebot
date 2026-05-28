@@ -15,8 +15,10 @@ export class UnifiedPipeline {
     private audioBuffer: Buffer[] = [];
     private isActive = false;
     private detectedLang = 'hi-IN';
+    private voiceId = 'anand';
 
-    constructor(socket: Socket, systemPrompt: string) {
+    constructor(socket: Socket, systemPrompt: string, voiceId: string = "anand") {
+        this.voiceId = voiceId;
         this.socket = socket;
         this.systemPrompt = systemPrompt;
         this.sarvam = new SarvamAIClient({ apiSubscriptionKey: SARVAM_API_KEY });
@@ -74,7 +76,7 @@ export class UnifiedPipeline {
 
     private async speak(text: string, lang: string): Promise<void> {
         const res = await (this.sarvam.textToSpeech as any).convert({
-            inputs: [text], target_language_code: lang, speaker: 'anand', model: 'bulbul:v3', output_audio_format: 'pcm',
+            inputs: [text], target_language_code: lang, speaker: this.voiceId, model: 'bulbul:v3', output_audio_format: 'pcm',
         });
         if (res?.audios?.[0]) {
             const buf = Buffer.from(res.audios[0], 'base64');
