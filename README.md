@@ -111,7 +111,7 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 
 ## Key Features
 
-- **ChatGPT-Style Language Auto-Switching:** Zero-shot language detection via Sarvam's `languageCode: "unknown"` parameter dynamically switches both the backend LLM synthesis and browser Speech Recognition to the user's spoken language locale.
+- **Language Auto-Switching:** Zero-shot language detection via Sarvam's `languageCode: "unknown"` parameter dynamically switches both the backend LLM synthesis and browser Speech Recognition to the user's spoken language locale.
 - **Smart Barge-In Prevention:** Software-level acoustic feedback suppression, room noise floor tracking, and consecutive frame verification (4 frames / ~100ms) prevent accidental cutoffs from typing, background fan noise, or speaker echo.
 - **RAG Knowledge Base integration:** The LLM triggers tool calls to search product catalogs stored dynamically in Amazon Bedrock Knowledge Base vector indexes.
 - **Optional Custom Domain Mapping:** Built-in AWS CDK support to map custom domain names (e.g. `voicebot.preciseengineers.com`) through CloudFront and AWS Certificate Manager (ACM).
