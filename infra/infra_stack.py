@@ -12,6 +12,7 @@ from aws_cdk import (
     aws_logs as logs,
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
+    aws_certificatemanager as acm,
 )
 import os
 from constructs import Construct
@@ -207,16 +208,16 @@ class InfraStack(Stack):
             query_string_behavior=cloudfront.OriginRequestQueryStringBehavior.all(),
             cookie_behavior=cloudfront.OriginRequestCookieBehavior.all()
         )
-        distribution = cloudfront.Distribution(
-            self, "VoicebotDistribution",
-            default_behavior=cloudfront.BehaviorOptions(
+
+        distribution_kwargs = {
+            "default_behavior": cloudfront.BehaviorOptions(
                 origin=nlb_origin,
                 viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
                 cache_policy=cloudfront.CachePolicy.CACHING_DISABLED,
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_ALL,
                 origin_request_policy=websocket_policy
             ),
-            additional_behaviors={
+            "additional_behaviors": {
                 "/socket.io/*": cloudfront.BehaviorOptions(
                     origin=nlb_origin,
                     viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
@@ -225,7 +226,21 @@ class InfraStack(Stack):
                     origin_request_policy=websocket_policy
                 )
             },
-            minimum_protocol_version=cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+            "minimum_protocol_version": cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+        }
+
+        custom_domain = os.environ.get("CUSTOM_DOMAIN_NAME")
+        acm_cert_arn = os.environ.get("ACM_CERTIFICATE_ARN")
+        if custom_domain and acm_cert_arn:
+            distribution_kwargs["domain_names"] = [custom_domain]
+            distribution_kwargs["certificate"] = acm.Certificate.from_certificate_arn(
+                self, "CustomDomainCertificate",
+                certificate_arn=acm_cert_arn
+            )
+
+        distribution = cloudfront.Distribution(
+            self, "VoicebotDistribution",
+            **distribution_kwargs
         )
         CfnOutput(self, "CloudFrontURL",
             value=f"https://{distribution.distribution_domain_name}",
