@@ -51,6 +51,15 @@ This conversational AI voicebot solves these challenges by combining low-latency
                     [ Amazon Bedrock & KB ]
 ```
 
+### Why This Infrastructure for AI Applications?
+
+Designing low-latency voice AI assistants requires solving distinct networking and security challenges:
+
+- **VPC & Private Subnets (IP & Data Security):** Because the backend container interacts with Bedrock models, contains API subscription keys, and runs RAG queries against the product catalog, it is isolated in a private subnet. The container has no public IP address, preventing direct scanner attacks and keeping customer queries and vector data secure.
+- **Network Load Balancer (Layer 4 Routing):** Bidirectional real-time voice streaming relies on persistent WebSocket connections. Traditional Application Load Balancers (ALBs) operating at Layer 7 evaluate headers and add network routing latency. The NLB operates at Layer 4 (TCP level) to route audio packet buffers directly to the container instances with sub-millisecond routing overhead, ensuring no audio jitter or cutoff.
+- **Amazon CloudFront (Edge Processing & SSL Offloading):** Offloads SSL/TLS decryption from the application container to the AWS edge. CloudFront handles HTTPS handshakes and dynamically maps both static elements and `/socket.io/*` WebSocket routes to the NLB, protecting the backend with built-in AWS Shield DDoS mitigation.
+- **ECS Fargate (Dedicated Serverless Compute):** Real-time audio pipelines (handling concurrent STT, LLM streaming, and TTS synthesis) are CPU-bound. Fargate guarantees isolated vCPU and RAM parameters, preventing CPU starvation from distorting synthetic speech during voice generations.
+
 ---
 
 ## Technical Stack
