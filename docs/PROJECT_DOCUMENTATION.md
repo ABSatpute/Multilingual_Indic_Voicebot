@@ -33,7 +33,7 @@ The system is constructed with strict modularity, dividing concerns between Clie
 | Technology | Version | Purpose in Project |
 | :--- | :--- | :--- |
 | **Node.js** | `v22-slim` | Execution runtime for the backend API and WebSocket orchestrator. The `slim` image minimizes production container overhead. |
-| **TypeScript** | `v5.x` | Used throughout the backend to provide type safety, modular structures, and compile-time verification. |
+| **TypeScript** | `v5.x` | Backend programming language providing compile-time type safety. Managed via `tsconfig.json` targeting `ES2020` outputs using `commonjs` modules, transpiling code files into `./dist/`. |
 | **Vanilla JavaScript** | ES6+ | Client-side scripting inside `main.js` to manage browser audio buffers and UI styling without heavy framework overhead. |
 | **Python** | `v3.12` | Python environment for running the AWS Cloud Development Kit (CDK) app and provisioning infrastructure. |
 
@@ -44,6 +44,7 @@ The system is constructed with strict modularity, dividing concerns between Clie
 | **Socket.IO** | `^4.x` | Enables real-time, bidirectional, low-latency communication via WebSockets (`wss://`). Essential for streaming raw binary audio blocks. |
 | **Web Audio API** | Native Browser | Operates on the client to request mic permissions, access the microphone stream, convert floats into signed 16-bit PCM buffers, and play raw streaming audio. |
 | **Web Speech API** | Native Browser | Backs up translation visualization. Restarts with the correct locale settings upon `languageDetected` events to sync client-side input with backend pipeline languages. |
+| **HTML5 Canvas (2D Waveform)** | Native Browser | Uses dual `<canvas>` overlays and `CanvasRenderingContext2D` to animate responsive waveforms and perimeter halos surrounding the mic button, scaled mathematically using voice RMS amplitudes in `main.js`. |
 
 ### C. Speech & Language APIs (Sarvam AI)
 All voice interactions are routed to **Sarvam AI** endpoints using the API Subscription Key (`api-subscription-key`).
@@ -350,7 +351,9 @@ All infrastructure is provisioned programmatically in ap-south-1 via the Python 
 * **CPU:** 1024 (1 vCPU)
 * **RAM:** 4096 (4 GB)
 * **Docker Multi-Stage Build:**
-  * Uses `node:22-slim` to execute compiles and copy the final output directory `/dist` and public folders `/public` into the output runtime target.
+  * **Stage 1 (Builder):** Pulls `node:22-slim`, copies `package.json` and `tsconfig.json`, downloads all compile dependencies via `npm install`, copies TypeScript source files, and runs the compiler (`npm run build` -> `tsc`) compiling down to Node-executable JS in `/dist`.
+  * **Stage 2 (Production Output):** Pulls a fresh `node:22-slim` image, downloads **only production runtime dependencies** using `npm install --omit=dev`, copies the compiled `/dist` directory from Stage 1, copies the static client `/public` asset folders, exposes port `3000`, and runs `node dist/server.js`.
+* **Docker Ignore File (`.dockerignore`):** Configured to ignore `node_modules`, `dist`, `.env`, and documentation `.md` files to prevent caching local packages or exposing secrets in the Docker build context.
 * **IAM Least-Privilege Policies:**
   * `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on foundation models and inference profiles.
   * `bedrock:Retrieve` and `bedrock:RetrieveAndGenerate` on the Knowledge Base ARN `arn:aws:bedrock:ap-south-1:417780655467:knowledge-base/HN2QJNTWYX`.
