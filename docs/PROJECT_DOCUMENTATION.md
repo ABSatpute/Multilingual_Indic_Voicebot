@@ -1,7 +1,7 @@
-# KNOWLEDGE TRANSFER (KT) & HANDOVER DOCUMENTATION
-## Project: Multilingual Indic Voicebot for Precise Engineers
+# Multilingual Indic Voicebot for Precise Engineers
+## Architecture, Technical Stack, and System Documentation
 
-This document serves as the official Knowledge Transfer (KT) and systems handover manual for the **Multilingual Indic Voicebot** developed for **Precise Engineers, Indore**. It is designed to onboard developers, systems engineers, and maintainers by providing granular-level details on the architecture, technical stack, environment variables, APIs, cloud infrastructure, and operational workflows.
+This document provides a comprehensive technical breakdown of the **Multilingual Indic Voicebot** developed for **Precise Engineers, Indore**. It details the architectural decisions, core technologies, low-latency communication protocols, smart Voice Activity Detection (VAD) algorithms, and operational workflows.
 
 ---
 
@@ -361,7 +361,7 @@ All infrastructure is provisioned programmatically in ap-south-1 via the Python 
 
 ---
 
-## 8. MAINTENANCE & TROUBLESHOOTING HANDOVER
+## 8. MAINTENANCE & TROUBLESHOOTING GUIDE
 
 ### A. Deployment Command
 To redeploy the backend application after making local edits:
