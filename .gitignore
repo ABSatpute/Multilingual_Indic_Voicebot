@@ -28,3 +28,7 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Resume & Interview Guides
+docs/RESUME_ONBOARDING_GUIDE.md
+
