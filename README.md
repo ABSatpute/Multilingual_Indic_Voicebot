@@ -84,17 +84,17 @@ Create a `.env` file in **both** the project's root folder and the `backend/` fo
 
 ```env
 # AWS Credentials & Connection Settings
-AWS_ACCOUNT_ID=YOUR_AWS_ACCOUNT_ID
+AWS_ACCOUNT_ID=<YOUR_AWS_ACCOUNT_ID>
 AWS_DEFAULT_REGION=ap-south-1
 
 # Bedrock Knowledge Base Configuration
 KB_REGION=ap-south-1
-KB_KNOWLEDGE_BASE_ID=YOUR_BEDROCK_KNOWLEDGE_BASE_ID
-KB_MODEL_ARN=arn:aws:bedrock:ap-south-1:YOUR_AWS_ACCOUNT_ID:inference-profile/apac.amazon.nova-micro-v1:0
+KB_KNOWLEDGE_BASE_ID=<YOUR_BEDROCK_KNOWLEDGE_BASE_ID>
+KB_MODEL_ARN=arn:aws:bedrock:ap-south-1:<YOUR_AWS_ACCOUNT_ID>:inference-profile/apac.amazon.nova-micro-v1:0
 LLM_MODEL=apac.amazon.nova-pro-v1:0
 
 # Sarvam AI API Configurations
-SARVAM_API_KEY=YOUR_SARVAM_API_KEY
+SARVAM_API_KEY=<YOUR_SARVAM_API_KEY>
 SARVAM_STT_MODEL=saaras:v3
 SARVAM_TTS_MODEL=bulbul:v3
 
@@ -144,19 +144,19 @@ pip install -r requirements.txt
 While in the `infra/` directory (with virtual env active):
 ```bash
 # Bootstrap CDK (if first time in region)
-npx cdk bootstrap --profile your-aws-profile
+npx cdk bootstrap --profile <your-aws-profile>
 
 # Synthesize template
 npx cdk synth
 
 # Deploy stack
-npx cdk deploy --require-approval never --profile your-aws-profile
+npx cdk deploy --require-approval never --profile <your-aws-profile>
 ```
 
 ### 3. Tear Down (Stop AWS Charges)
 To delete all compute resources and network setups:
 ```bash
-npx cdk destroy --profile your-aws-profile
+npx cdk destroy --profile <your-aws-profile>
 ```
 
 ---
@@ -168,7 +168,7 @@ If your Sarvam API Key expires and you need to deploy a new one:
 1. Update the `SARVAM_API_KEY` value in your root `.env` file.
 2. Open your terminal in the `infra/` folder, activate the virtual environment, and run:
    ```bash
-   npx cdk deploy --require-approval never --profile your-aws-profile
+   npx cdk deploy --require-approval never --profile <your-aws-profile>
    ```
 ECS will trigger a zero-downtime rolling deployment, launching a new task with the updated key and shutting down the old one.
 
@@ -179,9 +179,9 @@ To assign a custom domain mapping to the voicebot:
 3. Once the certificate is **Issued**, copy its ARN.
 4. Update the root `.env` with:
    - `CUSTOM_DOMAIN_NAME=voicebot.preciseengineers.com`
-   - `ACM_CERTIFICATE_ARN=arn:aws:acm:us-east-1:xxxxxx...`
+   - `ACM_CERTIFICATE_ARN=arn:aws:acm:us-east-1:<YOUR_AWS_ACCOUNT_ID>:certificate/<CERTIFICATE_ID>`
 5. Run `npx cdk deploy` to update the CloudFront distribution.
-6. Create an Alias (A) or CNAME record in your DNS provider pointing your domain to the output CloudFront domain name (e.g. `xxxxx.cloudfront.net`).
+6. Create an Alias (A) or CNAME record in your DNS provider pointing your domain to the output CloudFront domain name (e.g. `<YOUR_DISTRIBUTION_ID>.cloudfront.net`).
 
 ---
 
