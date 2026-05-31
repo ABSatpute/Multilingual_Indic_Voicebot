@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "tsx watch --clear-screen=false src/server.ts < /dev/null"
+    "dev": "tsx watch --clear-screen=false server.ts"
   },
   "keywords": [],
   "author": "",

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Conversational AI with Amazon Nova 2 Sonic</title>
+    <title>Multilingual Indic Voicebot for Precise Engineers</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="icon" type="image/png" href="/nova-icon.png">
     <link rel="stylesheet" href="/src/style.css">
@@ -11,8 +11,8 @@
     <div id="app">
         <header class="app-header">
             <h1 class="app-title">
-                <img src="/nova-icon.png" alt="Nova" class="header-icon" width="32" height="32">
-                Amazon Nova 2 Sonic
+                <img src="/nova-icon.png" alt="Multilingual Indic Voicebot for Precise Engineers" class="header-icon" width="32" height="32">
+                Multilingual Indic Voicebot for Precise Engineers
             </h1>
             <div class="header-controls">
                 <div id="theme-toggle" class="theme-toggle" aria-label="Toggle theme"></div>
@@ -77,6 +77,31 @@
                                     <div class="custom-select-option" data-value="anand"><svg class="gender-icon male" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="12" cy="7" r="4"/><path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg> Anand</div>
                                     <div class="custom-select-option" data-value="rahul"><svg class="gender-icon male" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="12" cy="7" r="4"/><path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg> Rahul</div>
                                     <div class="custom-select-option" data-value="shubh"><svg class="gender-icon male" viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><circle cx="12" cy="7" r="4"/><path d="M12 14c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg> Shubh</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="setting-item">
+                            <label class="settings-label">Language</label>
+                            <div class="custom-select" data-id="language-select" data-value="hindi">
+                                <div class="custom-select-trigger">
+                                    <span class="custom-select-value">Hindi</span>
+                                    <div class="custom-select-arrow">
+                                        <svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 4L6 8L10 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+                                    </div>
+                                </div>
+                                <div class="custom-select-options">
+                                    <div class="custom-select-option" data-value="english">English</div>
+                                    <div class="custom-select-option selected" data-value="hindi">Hindi</div>
+                                    <div class="custom-select-option" data-value="tamil">Tamil</div>
+                                    <div class="custom-select-option" data-value="telugu">Telugu</div>
+                                    <div class="custom-select-option" data-value="kannada">Kannada</div>
+                                    <div class="custom-select-option" data-value="bengali">Bengali</div>
+                                    <div class="custom-select-option" data-value="malayalam">Malayalam</div>
+                                    <div class="custom-select-option" data-value="marathi">Marathi</div>
+                                    <div class="custom-select-option" data-value="gujarati">Gujarati</div>
+                                    <div class="custom-select-option" data-value="punjabi">Punjabi</div>
+                                    <div class="custom-select-option" data-value="odia">Odia</div>
+                                    <div class="custom-select-option" data-value="assamese">Assamese</div>
                                 </div>
                             </div>
                         </div>
@@ -163,6 +188,16 @@
                 <details class="settings-accordion">
                     <summary>Audio Settings</summary>
                     <div class="accordion-content">
+                        <div class="setting-item" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                            <div>
+                                <label class="settings-label" style="margin-bottom: 4px;">Enable Barge-in</label>
+                                <p class="setting-hint" style="margin-top: 0;">Allow your voice to interrupt the assistant's voice playback</p>
+                            </div>
+                            <label class="tool-checkbox" style="margin-top: 0;">
+                                <input type="checkbox" id="enable-barge-in" checked>
+                                <span class="checkmark"></span>
+                            </label>
+                        </div>
                         <div class="setting-item slider-item">
                             <div class="slider-header">
                                 <label class="settings-label">Initial buffer (ms)</label>
@@ -170,6 +205,22 @@
                             </div>
                             <input type="range" id="audio-buffer" class="settings-slider" min="0" max="1000" step="100" value="200">
                             <p class="setting-hint">Lower = faster response, higher = smoother playback</p>
+                        </div>
+                        <div class="setting-item slider-item">
+                            <div class="slider-header">
+                                <label class="settings-label">VAD Threshold</label>
+                                <input type="number" id="vad-threshold-value" class="slider-value-input" value="0.025" min="0.005" max="0.100" step="0.005">
+                            </div>
+                            <input type="range" id="vad-threshold" class="settings-slider" min="0.005" max="0.100" step="0.005" value="0.025">
+                            <p class="setting-hint">Mic sensitivity for speaking detection (lower = more sensitive)</p>
+                        </div>
+                        <div class="setting-item slider-item">
+                            <div class="slider-header">
+                                <label class="settings-label">Barge-in Threshold</label>
+                                <input type="number" id="barge-in-threshold-value" class="slider-value-input" value="0.150" min="0.010" max="0.200" step="0.005">
+                            </div>
+                            <input type="range" id="barge-in-threshold" class="settings-slider" min="0.010" max="0.200" step="0.005" value="0.150">
+                            <p class="setting-hint">Mic sensitivity to interrupt the bot (higher = less accidental triggers)</p>
                         </div>
                     </div>
                 </details>
@@ -207,6 +258,7 @@
         </div>
 
         <main class="main-content">
+
             <div class="voice-container">
                 <canvas id="waveform-canvas" class="waveform-canvas"></canvas>
                 <div class="button-wrapper">

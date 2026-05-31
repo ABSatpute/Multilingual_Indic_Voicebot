@@ -4,7 +4,9 @@ import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 // Connect to the server
 // Clear stale config
 const _saved = localStorage.getItem('novaSonicConfig'); if (_saved) { try { const _p = JSON.parse(_saved); if (_p.awsRegion === 'ap-northeast-1') localStorage.removeItem('novaSonicConfig'); } catch(e) {} }
-const socket = io();
+const socket = io({
+    transports: ['polling']
+});
 const SARVAM_LANGUAGES = new Set(["tamil","telugu","kannada","bengali","malayalam","marathi","gujarati","punjabi","odia","assamese"]);
 function isSarvamLanguage(lang) { return true; }
 
@@ -34,6 +36,11 @@ const maxTokensSlider = document.getElementById('max-tokens');
 const maxTokensValue = document.getElementById('max-tokens-value');
 const audioBufferSlider = document.getElementById('audio-buffer');
 const audioBufferValue = document.getElementById('audio-buffer-value');
+const vadThresholdSlider = document.getElementById('vad-threshold');
+const vadThresholdValue = document.getElementById('vad-threshold-value');
+const bargeInThresholdSlider = document.getElementById('barge-in-threshold');
+const bargeInThresholdValue = document.getElementById('barge-in-threshold-value');
+const enableBargeInCheckbox = document.getElementById('enable-barge-in');
 
 // Custom dropdown elements
 const customSelects = document.querySelectorAll('.custom-select');
@@ -57,6 +64,15 @@ const chatHistoryManager = ChatHistoryManager.getInstance(
 let audioContext;
 let audioStream;
 let isStreaming = false;
+let isInitializing = false;
+let currentKBIndicator = null;
+let currentTurnLanguage = null;
+let isAssistantSpeaking = false;
+let bargeInCooldownEndTime = 0;
+let assistantSpeakStartTime = 0;
+let isWaitingForResponse = false;
+let noiseFloor = 0.02; // Initial guess for quiet room
+let consecutiveSpeechFrames = 0;
 let processor;
 let sourceNode;
 let waitingForAssistantResponse = false;
@@ -101,10 +117,14 @@ let config = {
     responseTiming: 'medium',
     outputSampleRate: 24000,
     audioBufferMs: 200,
-    temperature: 1,
+    temperature: 0.4,
     topP: 0.9,
     maxTokens: 2048,
-    enabledTools: []
+    enabledTools: [],
+    language: 'hindi',
+    vadThreshold: 0.025,
+    bargeInThreshold: 0.150,
+    enableBargeIn: true
 };
 
 // Available tools (loaded from server)
@@ -205,7 +225,15 @@ async function handleSessionTimeout() {
         
         // Reinitialize if was streaming
         if (wasStreaming) {
-            await initializeSession();
+            socket.emit('sarvamStart', { 
+                language: config.language, 
+                systemPrompt: config.systemPrompt, 
+                voiceId: config.voiceId,
+                temperature: config.temperature,
+                topP: config.topP,
+                maxTokens: config.maxTokens,
+                enabledTools: config.enabledTools
+            });
             renewDiv.innerHTML = '<span class="renew-icon">✓</span> Session renewed';
             renewDiv.classList.add('success');
         } else {
@@ -249,6 +277,12 @@ function setSettingsDisabled(disabled) {
     maxTokensValue.disabled = disabled;
     audioBufferSlider.disabled = disabled;
     audioBufferValue.disabled = disabled;
+    vadThresholdSlider.disabled = disabled;
+    vadThresholdValue.disabled = disabled;
+    
+    enableBargeInCheckbox.disabled = disabled;
+    bargeInThresholdSlider.disabled = disabled || !config.enableBargeIn;
+    bargeInThresholdValue.disabled = disabled || !config.enableBargeIn;
     
     // Disable/enable tools checkboxes
     setToolsDisabled(disabled);
@@ -342,6 +376,7 @@ async function loadPromptPreset(presetName) {
     if (promptPresets[presetName]) {
         config.systemPrompt = promptPresets[presetName];
         systemPromptTextarea.value = promptPresets[presetName];
+        syncSettingsToServer();
         return;
     }
     
@@ -352,6 +387,7 @@ async function loadPromptPreset(presetName) {
             promptPresets[presetName] = content;
             config.systemPrompt = content;
             systemPromptTextarea.value = content;
+            syncSettingsToServer();
         }
     } catch (error) {
         console.error('Failed to load prompt preset:', error);
@@ -360,6 +396,9 @@ async function loadPromptPreset(presetName) {
 
 function updateConfigFromSelect(selectId, value) {
     switch (selectId) {
+        case 'language-select':
+            config.language = value;
+            break;
         case 'aws-region':
             config.awsRegion = value;
             break;
@@ -376,6 +415,7 @@ function updateConfigFromSelect(selectId, value) {
             loadPromptPreset(value);
             break;
     }
+    syncSettingsToServer();
 }
 
 function setCustomSelectValue(selectId, value) {
@@ -411,6 +451,32 @@ async function initSettings() {
     const savedConfig = localStorage.getItem('novaSonicConfig');
     if (savedConfig) {
         config = { ...config, ...JSON.parse(savedConfig) };
+    }
+
+    // Auto-migrate old business name in saved local storage system prompt
+    if (config.systemPrompt) {
+        const originalPrompt = config.systemPrompt;
+        config.systemPrompt = config.systemPrompt
+            .replace(/JAIN SALES CORPORATION/g, 'PRECISE ENGINEERS')
+            .replace(/Jain Sales Corporation/g, 'Precise Engineers')
+            .replace(/Jain Sales/g, 'Precise Engineers')
+            .replace(/जैन सेल्स कॉर्पोरेशन/g, 'प्रिसाइज इंजीनियर्स')
+            .replace(/जैन सेल्स/g, 'प्रिसाइज इंजीनियर्स')
+            .replace(/ஜெயின் சேல்ஸ் கார்ப்பரேஷன்/g, 'பிரிசைஸ் இன்ஜினியர்ஸ்')
+            .replace(/ஜைன் சேல்ஸ் கார்ப்பரேஷன்/g, 'பிரிசைஸ் இன்ஜினியர்ஸ்')
+            .replace(/జైన్ సేల్స్ కార్పొరేషన్/g, 'ప్రిసైజ్ ఇంజనీర్స్')
+            .replace(/ಜೈನ್ ಸೇಲ್ಸ್ ಕಾರ್ಪೊರೇಶನ್/g, 'ಪ್ರಿಸೈಸ್ ಇಂಜಿನಿಯರ್ಸ್')
+            .replace(/জৈন সেলস কর্পোরেশন/g, 'প্রিসাইজ ইঞ্জিনিয়ার্স')
+            .replace(/ജെയിൻ സെയിൽസ് കോർപ്പറേഷൻ/g, 'പ്രിസൈസ് എഞ്ചിനീയേഴ്സ്')
+            .replace(/જૈન સેલ્સ કોર્પોરેશન/g, 'પ્રિસાઇઝ એન્જિનિયર્સ')
+            .replace(/ਜੈਨ ਸੇਲਜ਼ ਕਾਰਪੋਰੇਸ਼ਨ/g, 'ਪ੍ਰਿਸਾਈਜ਼ ਇੰਜੀਨੀਅਰਜ਼')
+            .replace(/ଜୈନ ସେଲ୍ସ କର୍ପୋରେସନ/g, 'ପ୍ରିସਾਈଜ୍ ଇଞ୍ջିନିୟର୍ସ')
+            .replace(/ଜୈନ ସେଲ୍ସ କର୍ପୋରେସନ୍/g, 'ପ୍ରିସਾਈଜ୍ ଇଞ୍ջିନିୟର୍ସ')
+            .replace(/জৈন চেলছ কৰ্পোৰেচন/g, 'প্রিসাইজ ইঞ্জিনিয়ার্স');
+
+        if (config.systemPrompt !== originalPrompt) {
+            saveConfig();
+        }
     }
     
     // Load default system prompt if empty
@@ -449,12 +515,22 @@ async function initSettings() {
             audioPlayer.setInitialBufferMs(value);
         }
     });
+    setupSliderSync(vadThresholdSlider, vadThresholdValue, 'vadThreshold');
+    setupSliderSync(bargeInThresholdSlider, bargeInThresholdValue, 'bargeInThreshold');
+
+    enableBargeInCheckbox.addEventListener('change', (e) => {
+        config.enableBargeIn = e.target.checked;
+        bargeInThresholdSlider.disabled = !config.enableBargeIn;
+        bargeInThresholdValue.disabled = !config.enableBargeIn;
+        syncSettingsToServer();
+    });
 
     // Textarea handler - switch to Custom when user edits
     systemPromptTextarea.addEventListener('input', (e) => {
         config.systemPrompt = e.target.value;
         // Switch preset dropdown to "Custom" when user manually edits
         setCustomSelectValue('prompt-preset', 'custom');
+        syncSettingsToServer();
     });
     
     // Load available tools
@@ -468,6 +544,7 @@ function setupSliderSync(slider, input, configKey, onChange = null) {
         config[configKey] = value;
         updateSliderTrack(slider);
         if (onChange) onChange(value);
+        syncSettingsToServer();
     });
 
     input.addEventListener('change', (e) => {
@@ -480,6 +557,7 @@ function setupSliderSync(slider, input, configKey, onChange = null) {
         config[configKey] = value;
         updateSliderTrack(slider);
         if (onChange) onChange(value);
+        syncSettingsToServer();
     });
 
     updateSliderTrack(slider);
@@ -490,10 +568,31 @@ function updateSliderTrack(slider) {
     slider.style.background = `linear-gradient(to right, var(--primary) ${percent}%, var(--bg-input) ${percent}%)`;
 }
 
+function updateStatusBadges() {
+    const langValue = document.getElementById('status-language-value');
+    if (langValue) {
+        const lang = config.language || 'hindi';
+        langValue.textContent = lang.charAt(0).toUpperCase() + lang.slice(1);
+    }
+    const kbBadge = document.getElementById('status-kb-badge');
+    const kbValue = document.getElementById('status-kb-value');
+    if (kbBadge && kbValue) {
+        const isKBEnabled = config.enabledTools && config.enabledTools.includes('search_knowledge_base');
+        if (isKBEnabled) {
+            kbBadge.classList.add('active');
+            kbValue.textContent = 'Ready';
+        } else {
+            kbBadge.classList.remove('active');
+            kbValue.textContent = 'Disabled';
+        }
+    }
+}
+
 function applyConfigToUI() {
     // Custom dropdowns
     setCustomSelectValue('aws-region', config.awsRegion);
     setCustomSelectValue('voice-type', config.voiceId);
+    setCustomSelectValue('language-select', config.language || 'hindi');
     setCustomSelectValue('response-timing', config.responseTiming);
     setCustomSelectValue('output-sample-rate', String(config.outputSampleRate));
 
@@ -509,12 +608,48 @@ function applyConfigToUI() {
     maxTokensValue.value = config.maxTokens;
     audioBufferSlider.value = config.audioBufferMs;
     audioBufferValue.value = config.audioBufferMs;
+    
+    vadThresholdSlider.value = config.vadThreshold;
+    vadThresholdValue.value = config.vadThreshold;
+    bargeInThresholdSlider.value = config.bargeInThreshold;
+    bargeInThresholdValue.value = config.bargeInThreshold;
+
+    enableBargeInCheckbox.checked = config.enableBargeIn !== false;
+    bargeInThresholdSlider.disabled = !config.enableBargeIn;
+    bargeInThresholdValue.disabled = !config.enableBargeIn;
 
     // Update slider tracks
     updateSliderTrack(temperatureSlider);
     updateSliderTrack(topPSlider);
     updateSliderTrack(maxTokensSlider);
     updateSliderTrack(audioBufferSlider);
+    updateSliderTrack(vadThresholdSlider);
+    updateSliderTrack(bargeInThresholdSlider);
+    
+    updateStatusBadges();
+}
+
+function syncSettingsToServer() {
+    saveConfig();
+    updateStatusBadges();
+    if (isStreaming && socket.connected) {
+        console.log('[Settings] Syncing config to server:', {
+            language: config.language,
+            systemPrompt: config.systemPrompt,
+            voiceId: config.voiceId,
+            temperature: config.temperature,
+            topP: config.topP,
+            maxTokens: config.maxTokens
+        });
+        socket.emit('sarvamUpdateConfig', {
+            language: config.language,
+            systemPrompt: config.systemPrompt,
+            voiceId: config.voiceId,
+            temperature: config.temperature,
+            topP: config.topP,
+            maxTokens: config.maxTokens
+        });
+    }
 }
 
 function saveConfig() {
@@ -614,7 +749,7 @@ function renderToolsList() {
             } else {
                 config.enabledTools = config.enabledTools.filter(t => t !== name);
             }
-            saveConfig();
+            syncSettingsToServer();
         });
     });
 }
@@ -930,73 +1065,112 @@ async function initAudio() {
     }
 }
 
-// Map response timing to AWS endpointingSensitivity
-const responseTimingToSensitivity = {
-    fast: 'HIGH',
-    medium: 'MEDIUM',
-    slow: 'LOW'
-};
+let recognition = null;
 
-// Initialize the session with Bedrock
-async function initializeSession() {
-    if (sessionInitialized) return;
+function startSpeechRecognition() {
+    if (recognition) {
+        try {
+            recognition.stop();
+        } catch (e) {}
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+        console.warn("SpeechRecognition not supported in this browser.");
+        return;
+    }
+
+    recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+
+    // Set language map
+    const langCodes = {
+        'hindi': 'hi-IN', 'english': 'en-IN', 'tamil': 'ta-IN', 'telugu': 'te-IN',
+        'kannada': 'kn-IN', 'bengali': 'bn-IN', 'malayalam': 'ml-IN', 'marathi': 'mr-IN',
+        'gujarati': 'gu-IN', 'punjabi': 'pa-IN', 'odia': 'or-IN', 'assamese': 'as-IN'
+    };
+    recognition.lang = langCodes[config.language.toLowerCase()] || 'en-IN';
+
+    recognition.onstart = () => {
+        console.log('[SpeechRecognition] Started');
+    };
+
+    recognition.onerror = (event) => {
+        if (event.error === 'not-allowed') {
+            console.error('[SpeechRecognition] Mic access not allowed');
+        } else {
+            console.error('[SpeechRecognition] Error:', event.error);
+        }
+    };
+
+    recognition.onend = () => {
+        console.log('[SpeechRecognition] Ended');
+        // Restart if we are still streaming and the assistant is NOT speaking
+        if (isStreaming && !isAssistantSpeaking) {
+            try {
+                recognition.start();
+            } catch (e) {
+                // Ignore error if already started
+            }
+        }
+    };
+
+    recognition.onresult = (event) => {
+        if (isAssistantSpeaking || Date.now() < bargeInCooldownEndTime) {
+            return;
+        }
+
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+                finalTranscript += event.results[i][0].transcript;
+            } else {
+                interimTranscript += event.results[i][0].transcript;
+            }
+        }
+
+        const text = (finalTranscript + interimTranscript).trim();
+        if (text) {
+            console.log('[SpeechRecognition] Real-time text:', text);
+            chatHistoryManager.updateUserTranscript(text);
+        }
+    };
 
     try {
-        await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('Connection timeout')), 10000);
+        recognition.start();
+    } catch (e) {
+        console.error('[SpeechRecognition] Error starting recognition:', e);
+    }
+}
 
-            socket.emit('initializeConnection', {
-                region: config.awsRegion,
-                inferenceConfig: {
-                    maxTokens: config.maxTokens,
-                    temperature: config.temperature,
-                    topP: config.topP
-                },
-                turnDetectionConfig: {
-                    endpointingSensitivity: responseTimingToSensitivity[config.responseTiming] || 'MEDIUM'
-                },
-                enabledTools: config.enabledTools
-            }, (ack) => {
-                clearTimeout(timeout);
-                if (ack?.success) resolve();
-                else reject(new Error(ack?.error || 'Connection failed'));
-            });
-        });
-
-        // Update audio player sample rate BEFORE starting audio stream
-        await audioPlayer.setSampleRate(config.outputSampleRate);
-
-        socket.emit('promptStart', { 
-            voiceId: config.voiceId,
-            outputSampleRate: config.outputSampleRate 
-        });
-        
-        socket.emit('systemPrompt', {
-            content: config.systemPrompt,
-            voiceId: config.voiceId
-        });
-        socket.emit('audioStart');
-
-        // Wait for audioReady before proceeding
-        await new Promise((resolve) => {
-            socket.once('audioReady', resolve);
-        });
-
-        sessionInitialized = true;
-        startSessionTimers(); // Start session timeout tracking
-    } catch (error) {
-        console.error("Failed to initialize session:", error);
-        throw error;
+function stopSpeechRecognition() {
+    if (recognition) {
+        try {
+            recognition.stop();
+        } catch (e) {}
+        recognition = null;
     }
 }
 
 async function startStreaming() {
-    if (isStreaming) return;
+    if (isStreaming || isInitializing) return;
+    isInitializing = true;
 
     try {
         // Clear chat history on new conversation start
         chatHistoryManager.clearHistory();
         clearChatUI();
+
+        // Reset VAD state to prevent old state from triggering
+        window._sarvamSpeaking = false;
+        if (window._sarvamTimer) {
+            clearTimeout(window._sarvamTimer);
+            window._sarvamTimer = null;
+        }
+        isAssistantSpeaking = false;
 
         if (!socket.connected) {
             socket.connect();
@@ -1016,19 +1190,24 @@ async function startStreaming() {
         }
 
         if (!sessionInitialized) {
-            if (!isSarvamLanguage(config.language)) {
-                await initializeSession();
-            } else {
-                if (!config.systemPrompt || !config.systemPrompt.trim()) {
-                    await loadPromptPreset('default');
-                }
-                socket.emit('sarvamStart', { language: config.language, systemPrompt: config.systemPrompt, voiceId: config.voiceId });
-                await new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
-                    socket.once('sarvamReady', () => { clearTimeout(timeout); resolve(); });
-                    socket.once('error', (e) => { clearTimeout(timeout); reject(new Error(e.details || e.message)); });
-                });
+            if (!config.systemPrompt || !config.systemPrompt.trim()) {
+                await loadPromptPreset('default');
             }
+            socket.emit('sarvamStart', { 
+                language: config.language, 
+                systemPrompt: config.systemPrompt, 
+                voiceId: config.voiceId,
+                temperature: config.temperature,
+                topP: config.topP,
+                maxTokens: config.maxTokens,
+                enabledTools: config.enabledTools
+            });
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
+                socket.once('sarvamReady', () => { clearTimeout(timeout); resolve(); });
+                socket.once('error', (e) => { clearTimeout(timeout); reject(new Error(e.details || e.message)); });
+            });
+            sessionInitialized = true;
         }
 
         sourceNode = audioContext.createMediaStreamSource(audioStream);
@@ -1043,13 +1222,91 @@ async function startStreaming() {
                 const numSamples = Math.round(inputData.length / samplingRatio);
                 const pcmData = isFirefox ? (new Int16Array(numSamples)) : (new Int16Array(inputData.length));
 
-                // Calculate audio level for visualization
+                // Calculate audio level for visualization and barge-in VAD
                 let sum = 0;
                 for (let i = 0; i < inputData.length; i++) {
                     sum += inputData[i] * inputData[i];
                 }
                 const rms = Math.sqrt(sum / inputData.length);
                 updateAudioLevel(rms);
+
+                // Update running noise floor when room is quiet
+                if (!isAssistantSpeaking && !isWaitingForResponse && !window._sarvamSpeaking && !window._sarvamTimer) {
+                    noiseFloor = noiseFloor * 0.98 + rms * 0.02;
+                }
+
+                // Barge-in Cooldown: Discard microphone capture for a short period after barge-in
+                if (Date.now() < bargeInCooldownEndTime) {
+                    window._sarvamSpeaking = false;
+                    if (window._sarvamTimer) {
+                        clearTimeout(window._sarvamTimer);
+                        window._sarvamTimer = null;
+                    }
+                    consecutiveSpeechFrames = 0;
+                    return;
+                }
+
+                // Compute adaptive barge-in threshold (elevated when assistant is speaking to suppress speaker echo)
+                const baseBargeInThreshold = Math.max(config.bargeInThreshold, noiseFloor * 1.8);
+                const activeBargeInThreshold = isAssistantSpeaking
+                    ? Math.max(config.bargeInThreshold * 1.6, noiseFloor * 2.2)
+                    : baseBargeInThreshold;
+
+                // Barge-in Interruption: User starts speaking while AI is playing
+                const assistantSpeakingDuration = Date.now() - assistantSpeakStartTime;
+                if (config.enableBargeIn && isAssistantSpeaking && assistantSpeakingDuration > 1000) {
+                    if (rms > activeBargeInThreshold) {
+                        consecutiveSpeechFrames++;
+                        if (consecutiveSpeechFrames >= 4) { // Requires ~50-120ms of continuous sound
+                            console.log('[VAD] Speech detected during AI turn! Interrupting assistant. RMS:', rms.toFixed(5), 'Threshold:', activeBargeInThreshold.toFixed(5), 'NoiseFloor:', noiseFloor.toFixed(5));
+                            
+                            // Activate cooldown to discard echo/residual audio
+                            bargeInCooldownEndTime = Date.now() + 800;
+                            consecutiveSpeechFrames = 0;
+                            
+                            // Stop client playback immediately
+                            audioPlayer.bargeIn();
+                            
+                            // Notify server to stop generation / sequential speaking
+                            socket.emit('interruptAssistant');
+                            
+                            // Reset client-side turn state
+                            isAssistantSpeaking = false;
+                            isWaitingForResponse = false;
+                            
+                            // UI: Mark last assistant message as interrupted
+                            chatHistoryManager.markLastAssistantInterrupted();
+                            
+                            // Start user recording state
+                            if (window._sarvamTimer) {
+                                clearTimeout(window._sarvamTimer);
+                                window._sarvamTimer = null;
+                            }
+                            window._sarvamSpeaking = true;
+                            
+                            // Restart local speech recognition to capture text after a short delay
+                            setTimeout(() => {
+                                if (isStreaming && !isAssistantSpeaking && Date.now() >= bargeInCooldownEndTime) {
+                                    startSpeechRecognition();
+                                }
+                            }, 500);
+                        }
+                    } else {
+                        consecutiveSpeechFrames = 0;
+                    }
+                } else {
+                    consecutiveSpeechFrames = 0;
+                }
+
+                // If assistant is still speaking or we are waiting, discard mic capture
+                if (isAssistantSpeaking || isWaitingForResponse) {
+                    window._sarvamSpeaking = false;
+                    if (window._sarvamTimer) {
+                        clearTimeout(window._sarvamTimer);
+                        window._sarvamTimer = null;
+                    }
+                    return;
+                }
 
                 if (isFirefox) {
                     for (let i = 0; i < numSamples; i++) {
@@ -1064,15 +1321,43 @@ async function startStreaming() {
                 const base64Data = arrayBufferToBase64(pcmData.buffer);
                 socket.emit('audioInput', base64Data);
 
+                // Compute adaptive VAD threshold to prevent noise locks
+                const activeVadThreshold = Math.max(config.vadThreshold, noiseFloor * 1.5);
+
                 // Sarvam VAD: trigger after 800ms silence
                 if (isSarvamLanguage(config.language)) {
-                    clearTimeout(window._sarvamTimer);
-                    if (rms > 0.01) { window._sarvamSpeaking = true; }
+                    if (!window._lastRmsLog || Date.now() - window._lastRmsLog > 2000) {
+                        console.log('[VAD] Current mic level (RMS):', rms.toFixed(5), 'Threshold:', activeVadThreshold.toFixed(5), 'NoiseFloor:', noiseFloor.toFixed(5), 'Speaking state:', !!window._sarvamSpeaking, 'Timer active:', !!window._sarvamTimer);
+                        window._lastRmsLog = Date.now();
+                    }
+
+                    if (rms > activeVadThreshold) { 
+                        if (window._sarvamTimer) {
+                            clearTimeout(window._sarvamTimer);
+                            window._sarvamTimer = null;
+                        }
+                        if (!window._sarvamSpeaking) {
+                            console.log('[VAD] Speech detected! RMS:', rms.toFixed(5));
+                        }
+                        window._sarvamSpeaking = true; 
+                    }
                     else if (window._sarvamSpeaking) {
-                        window._sarvamTimer = setTimeout(() => {
-                            window._sarvamSpeaking = false;
-                            socket.emit('sarvamAudioEnd');
-                        }, 800);
+                        if (!window._sarvamTimer) {
+                            const timings = {
+                                'fast': 600,
+                                'medium': 1200,
+                                'slow': 2000
+                            };
+                            const silenceTimeout = timings[config.responseTiming] || 1200;
+                            window._sarvamTimer = setTimeout(() => {
+                                console.log(`[VAD] Silence detected (${silenceTimeout}ms). Sending end of turn signal to server.`);
+                                window._sarvamSpeaking = false;
+                                isWaitingForResponse = true;
+                                stopSpeechRecognition();
+                                socket.emit('sarvamAudioEnd');
+                                window._sarvamTimer = null;
+                            }, silenceTimeout);
+                        }
                     }
                 }
             };
@@ -1088,16 +1373,19 @@ async function startStreaming() {
         voiceHint.textContent = 'Tap to stop';
         
         // Disable settings during conversation
-        setSettingsDisabled(true);
+        // setSettingsDisabled(true);
 
         // Start waveform animation
         initWaveformCanvas();
         startWaveformAnimation();
 
         transcriptionReceived = false;
+        startSpeechRecognition();
 
     } catch (error) {
         console.error("Error starting recording:", error);
+    } finally {
+        isInitializing = false;
     }
 }
 
@@ -1114,8 +1402,21 @@ function stopStreaming() {
     if (!isStreaming) return;
 
     isStreaming = false;
+    isAssistantSpeaking = false;
+    isWaitingForResponse = false;
+    stopSpeechRecognition();
+    window._sarvamSpeaking = false;
+    if (window._sarvamTimer) {
+        clearTimeout(window._sarvamTimer);
+        window._sarvamTimer = null;
+    }
     clearSessionTimers(); // Clear session timeout timers
     hideSessionWarning();
+    
+    if (currentKBIndicator) {
+        currentKBIndicator.remove();
+        currentKBIndicator = null;
+    }
 
     if (processor) {
         processor.disconnect();
@@ -1153,7 +1454,7 @@ function stopStreaming() {
     socket.disconnect();
     
     // Re-enable settings after conversation ends
-    setSettingsDisabled(false);
+    // setSettingsDisabled(false);
 }
 
 function base64ToFloat32Array(base64String) {
@@ -1181,7 +1482,8 @@ function handleTextOutput(data) {
     if (data.content) {
         const messageData = {
             role: data.role,
-            message: data.content
+            message: data.content,
+            detectedLanguage: data.detectedLanguage
         };
         chatHistoryManager.addTextMessage(messageData);
     }
@@ -1195,10 +1497,21 @@ function createNovaIcon() {
     return img;
 }
 
+function getPreviousUserLanguage(currentIndex) {
+    if (!chat || !chat.history) return null;
+    for (let i = currentIndex - 1; i >= 0; i--) {
+        const item = chat.history[i];
+        if (item && item.role?.toUpperCase() === 'USER' && item.detectedLanguage) {
+            return item.detectedLanguage;
+        }
+    }
+    return null;
+}
+
 // Track rendered message count to avoid re-rendering
 let renderedMessageCount = 0;
 
-function createMessageElement(item) {
+function createMessageElement(item, index) {
     if (item.endOfConversation) {
         const endDiv = document.createElement('div');
         endDiv.className = 'message system';
@@ -1212,8 +1525,13 @@ function createMessageElement(item) {
     }
 
     if (item.role) {
-        const messageDiv = document.createElement('div');
         const roleLowerCase = item.role.toLowerCase();
+        
+        // Wrap in message-wrapper to support inline metadata
+        const wrapper = document.createElement('div');
+        wrapper.className = `message-wrapper ${roleLowerCase}`;
+        
+        const messageDiv = document.createElement('div');
         messageDiv.className = `message ${roleLowerCase}`;
 
         // Add Nova icon for assistant messages
@@ -1237,8 +1555,20 @@ function createMessageElement(item) {
         }
         
         messageDiv.appendChild(content);
+        wrapper.appendChild(messageDiv);
 
-        return messageDiv;
+        // If it's a USER message and detected language changed, display it underneath the bubble
+        if (roleLowerCase === 'user' && item.detectedLanguage) {
+            const prevLang = getPreviousUserLanguage(index);
+            if (!prevLang || prevLang.toLowerCase() !== item.detectedLanguage.toLowerCase()) {
+                const subInfo = document.createElement('div');
+                subInfo.className = 'message-sub-info';
+                subInfo.innerHTML = `🌐 Detected: ${item.detectedLanguage}`;
+                wrapper.appendChild(subInfo);
+            }
+        }
+
+        return wrapper;
     }
     return null;
 }
@@ -1386,7 +1716,7 @@ function formatToolData(data) {
 let floatingToolCards = new Map(); // Map of toolUseId -> card element
 
 function showToolCard(toolData) {
-    // Don't create duplicate cards
+    // Track tool execution in memory, but do not append cards to the main message replies list
     if (floatingToolCards.has(toolData.toolUseId)) {
         return;
     }
@@ -1394,8 +1724,6 @@ function showToolCard(toolData) {
     const card = createToolCard(toolData);
     card.dataset.toolUseId = toolData.toolUseId;
     floatingToolCards.set(toolData.toolUseId, card);
-    chatContainer.appendChild(card);
-    scrollToBottom();
 }
 
 function updateToolCardById(toolUseId, toolData) {
@@ -1548,8 +1876,8 @@ function updateChatUI() {
         // Only render new messages (incremental update)
         const newMessages = chat.history.slice(renderedMessageCount);
         
-        newMessages.forEach(item => {
-            const messageEl = createMessageElement(item);
+        newMessages.forEach((item, idx) => {
+            const messageEl = createMessageElement(item, renderedMessageCount + idx);
             if (messageEl) {
                 chatContainer.appendChild(messageEl);
             }
@@ -1749,6 +2077,29 @@ socket.on('contentStart', (data) => {
 });
 
 socket.on('textOutput', (data) => {
+    if (isSarvamLanguage(config.language)) {
+        if (data.role?.toLowerCase() === 'user') {
+            hideUserThinkingIndicator();
+            transcriptionReceived = true;
+            chatHistoryManager.finalizeUserTranscript(data.content, currentTurnLanguage);
+            currentTurnLanguage = null;
+            showAssistantThinkingIndicator();
+        } else if (data.role?.toLowerCase() === 'assistant') {
+            hideAssistantThinkingIndicator();
+            
+            // Disappear KB inline indicator when assistant starts responding
+            if (currentKBIndicator) {
+                currentKBIndicator.classList.add('fade-out');
+                const temp = currentKBIndicator;
+                setTimeout(() => temp.remove(), 500);
+                currentKBIndicator = null;
+            }
+            
+            handleTextOutput({ role: 'ASSISTANT', content: data.content });
+        }
+        return;
+    }
+
     if (role === 'USER') {
         hideUserThinkingIndicator();
         transcriptionReceived = true;
@@ -1763,6 +2114,11 @@ socket.on('textOutput', (data) => {
 });
 
 socket.on('audioOutput', (data) => {
+    if (!isAssistantSpeaking) {
+        isAssistantSpeaking = true;
+        assistantSpeakStartTime = Date.now();
+        stopSpeechRecognition();
+    }
     if (data.content) {
         try {
             const audioData = base64ToFloat32Array(data.content);
@@ -1815,8 +2171,18 @@ socket.on('contentEnd', (data) => {
             pendingToolUses = [];
             chatHistoryManager.endTurn();
         } else if (data.stopReason?.toUpperCase() === 'INTERRUPTED') {
+            bargeInCooldownEndTime = Date.now() + 600;
             audioPlayer.bargeIn();
             chatHistoryManager.markLastAssistantInterrupted();
+            isAssistantSpeaking = false;
+            isWaitingForResponse = false;
+            if (isStreaming) {
+                setTimeout(() => {
+                    if (isStreaming && !isAssistantSpeaking && Date.now() >= bargeInCooldownEndTime) {
+                        startSpeechRecognition();
+                    }
+                }, 500);
+            }
             
             // Immediately stop the ring animation on interruption
             if (audioFadeTimer) {
@@ -1852,10 +2218,16 @@ socket.on('contentEnd', (data) => {
         // Start gradual fade out after remaining audio finishes
         audioFadeTimer = setTimeout(() => {
             console.debug(`Starting ring fade out, current assistantAudioLevel=${assistantAudioLevel}, ringFadeAlpha=${ringFadeAlpha}`);
+            isAssistantSpeaking = false;
+            isWaitingForResponse = false;
             
             // Trigger the ring fade out animation
             isRingFadingOut = true;
             targetAssistantAudioLevel = 0;
+            
+            if (isStreaming) {
+                startSpeechRecognition();
+            }
             
             // Reset tracking after fade completes
             setTimeout(() => {
@@ -1870,8 +2242,19 @@ socket.on('contentEnd', (data) => {
 
 socket.on('bargeIn', (data) => {
     console.log('Barge-in event received:', data);
+    bargeInCooldownEndTime = Date.now() + 600;
     audioPlayer.bargeIn();
     chatHistoryManager.markLastAssistantInterrupted();
+    isAssistantSpeaking = false;
+    isWaitingForResponse = false;
+    
+    if (isStreaming) {
+        setTimeout(() => {
+            if (isStreaming && !isAssistantSpeaking && Date.now() >= bargeInCooldownEndTime) {
+                startSpeechRecognition();
+            }
+        }, 500);
+    }
     
     // Immediately stop the ring animation on barge-in
     if (audioFadeTimer) {
@@ -1887,6 +2270,30 @@ socket.on('bargeIn', (data) => {
 socket.on('toolUse', (data) => {
     console.log('Tool use event received:', data);
     hideAssistantThinkingIndicator();
+    
+    if (data.toolName === 'search_knowledge_base') {
+        const kbBadge = document.getElementById('status-kb-badge');
+        const kbValue = document.getElementById('status-kb-value');
+        if (kbBadge && kbValue) {
+            kbBadge.className = 'status-badge kb-calling';
+            kbValue.textContent = 'Searching...';
+        }
+        
+        // Remove existing indicator if any
+        if (currentKBIndicator) {
+            currentKBIndicator.remove();
+        }
+        
+        // Add new temporary inline indicator between speech bubbles
+        currentKBIndicator = document.createElement('div');
+        currentKBIndicator.className = 'kb-inline-indicator';
+        currentKBIndicator.innerHTML = `
+            <span class="kb-inline-spinner"></span>
+            <span class="kb-inline-text">Searching in Knowledge Base...</span>
+        `;
+        chatContainer.appendChild(currentKBIndicator);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+    }
     
     // Parse content if it's a JSON string
     let inputData = data.content;
@@ -1910,8 +2317,8 @@ socket.on('toolUse', (data) => {
     // Add to pending tools array
     pendingToolUses.push(toolData);
     
-    // Show tool card immediately at the bottom of chat
-    showToolCard(toolData);
+    // Add to chat history so it renders in the chat log
+    chatHistoryManager.addToolUse(toolData);
 });
 
 socket.on('toolResult', (data) => {
@@ -1927,15 +2334,78 @@ socket.on('toolResult', (data) => {
         tool.elapsed = data.executionTimeMs || (tool.endTime - tool.startTime);
         tool.status = 'completed';
         
-        // Update the displayed tool card
-        updateToolCardById(data.toolUseId, tool);
+        // Update the tool card inside chat history
+        chatHistoryManager.updateToolResult(data.toolUseId, data.result);
+        
+        if (tool.toolName === 'search_knowledge_base') {
+            const kbBadge = document.getElementById('status-kb-badge');
+            const kbValue = document.getElementById('status-kb-value');
+            if (kbBadge && kbValue) {
+                kbBadge.className = 'status-badge active';
+                kbValue.textContent = 'Found Info';
+                setTimeout(() => {
+                    if (kbValue.textContent === 'Found Info') {
+                        kbValue.textContent = 'Ready';
+                    }
+                }, 3000);
+            }
+            
+            // Transition inline indicator to completed, then schedule disappearance
+            if (currentKBIndicator) {
+                currentKBIndicator.className = 'kb-inline-indicator completed';
+                currentKBIndicator.innerHTML = `
+                    <span class="kb-inline-check">✓</span>
+                    <span class="kb-inline-text">Searched in Knowledge Base</span>
+                `;
+                
+                setTimeout(() => {
+                    if (currentKBIndicator) {
+                        currentKBIndicator.classList.add('fade-out');
+                        const temp = currentKBIndicator;
+                        setTimeout(() => temp.remove(), 500);
+                        currentKBIndicator = null;
+                    }
+                }, 2500);
+            }
+        }
     }
     
     showAssistantThinkingIndicator();
 });
 
+socket.on('languageDetected', (data) => {
+    console.log('Language detected:', data);
+    
+    // Store detected language in global variable for user message binding
+    currentTurnLanguage = data.languageName;
+    
+    const langKey = data.languageName.toLowerCase();
+    if (config.language !== langKey) {
+        config.language = langKey;
+        setCustomSelectValue('language-select', langKey);
+        saveConfig();
+        // Dynamic SpeechRecognition language switch
+        if (isStreaming && !isAssistantSpeaking) {
+            console.log('[SpeechRecognition] Restarting in new language:', langKey);
+            startSpeechRecognition();
+        }
+    }
+    
+    const langValue = document.getElementById('status-language-value');
+    if (langValue) {
+        langValue.textContent = data.languageName;
+    }
+});
+
 socket.on('sarvamReady', () => { console.log('[Sarvam] Ready'); });
-socket.on('sarvamDone', () => { console.log('[Sarvam] Done'); window._sarvamSpeaking = false; setSettingsDisabled(false); });
+socket.on('sarvamDone', () => { 
+    console.log('[Sarvam] Done'); 
+    window._sarvamSpeaking = false; 
+    isWaitingForResponse = false; 
+    if (isStreaming && !isAssistantSpeaking) {
+        startSpeechRecognition();
+    }
+});
 
 socket.on('streamComplete', () => {
     if (isStreaming) stopStreaming();
@@ -1954,6 +2424,10 @@ socket.on('connect', () => {
 socket.on('disconnect', () => {
     if (manualDisconnect) {
         manualDisconnect = false;
+    } else {
+        if (isStreaming) {
+            stopStreaming();
+        }
     }
     sessionInitialized = false;
     hideUserThinkingIndicator();
@@ -1965,6 +2439,10 @@ socket.on('error', (error) => {
     console.error("Server error:", error);
     hideUserThinkingIndicator();
     hideAssistantThinkingIndicator();
+    isWaitingForResponse = false;
+    if (isStreaming && !isAssistantSpeaking) {
+        startSpeechRecognition();
+    }
     
     // Handle stream errors from AWS - stop conversation and show error
     if (error?.source === 'responseStream' && error?.details) {
@@ -1993,6 +2471,10 @@ socket.on('error', (error) => {
 
 // Voice button handler
 voiceBtn.addEventListener('click', () => {
+    if (isInitializing) {
+        console.log('Already initializing/connecting, ignoring click.');
+        return;
+    }
     if (isStreaming) {
         stopStreaming();
     } else {
@@ -2025,6 +2507,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlParams = new URLSearchParams(window.location.search);
     const language = urlParams.get('language');
     const autoStart = urlParams.get('autostart') !== 'false';
+    
+    if (language) {
+        config.language = language.toLowerCase();
+        setCustomSelectValue('language-select', config.language);
+    }
     
     if (language && autoStart) {
         console.log('[AUTO-START] Starting conversation with', language);

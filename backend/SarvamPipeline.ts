@@ -2,27 +2,314 @@ import { SarvamAIClient } from 'sarvamai';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } from '@aws-sdk/client-bedrock-agent-runtime';
 import { Socket } from 'socket.io';
+import { v4 as uuidv4 } from 'uuid';
 
-const SARVAM_API_KEY = process.env.SARVAM_API_KEY || '';
-const LLM_REGION = process.env.KB_REGION || 'ap-south-1';
-const LLM_MODEL = 'apac.amazon.nova-pro-v1:0';
-const KB_ID = process.env.KB_KNOWLEDGE_BASE_ID || '';
-const KB_MODEL_ARN = process.env.KB_MODEL_ARN || '';
+
+
+function getLanguageName(code: string): string {
+    const codes: Record<string, string> = {
+        'hi-in': 'Hindi',
+        'en-in': 'English',
+        'ta-in': 'Tamil',
+        'te-in': 'Telugu',
+        'kn-in': 'Kannada',
+        'bn-in': 'Bengali',
+        'ml-in': 'Malayalam',
+        'mr-in': 'Marathi',
+        'gu-in': 'Gujarati',
+        'pa-in': 'Punjabi',
+        'or-in': 'Odia',
+        'as-in': 'Assamese'
+    };
+    return codes[code.toLowerCase()] || code;
+}
+
+function addWavHeader(pcmBuffer: Buffer, sampleRate: number): Buffer {
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+    const blockAlign = numChannels * bitsPerSample / 8;
+    const dataSize = pcmBuffer.length;
+    const header = Buffer.alloc(44);
+
+    header.write('RIFF', 0);
+    header.writeUInt32LE(36 + dataSize, 4);
+    header.write('WAVE', 8);
+    header.write('fmt ', 12);
+    header.writeUInt32LE(16, 16);
+    header.writeUInt16LE(1, 20); // Linear PCM
+    header.writeUInt16LE(numChannels, 22);
+    header.writeUInt32LE(sampleRate, 24);
+    header.writeUInt32LE(byteRate, 28);
+    header.writeUInt16LE(blockAlign, 32);
+    header.writeUInt16LE(bitsPerSample, 34);
+    header.write('data', 36);
+    header.writeUInt32LE(dataSize, 40);
+
+    return Buffer.concat([header, pcmBuffer]);
+}
+
+function splitTextIntoChunks(text: string, maxLen = 450): string[] {
+    const chunks: string[] = [];
+    let current = '';
+    
+    // Split by sentence / clause punctuation or newlines
+    const parts = text.split(/([.!?।|,\n]+)/);
+    
+    for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!part) continue;
+        
+        if ((current + part).length > maxLen) {
+            if (current.trim()) {
+                chunks.push(current.trim());
+                current = '';
+            }
+            
+            // If a single part is longer than maxLen, split it by spaces
+            if (part.length > maxLen) {
+                const words = part.split(/\s+/);
+                let subChunk = '';
+                for (const word of words) {
+                    if ((subChunk + ' ' + word).length > maxLen) {
+                        if (subChunk.trim()) {
+                            chunks.push(subChunk.trim());
+                        }
+                        subChunk = word;
+                    } else {
+                        subChunk = subChunk ? subChunk + ' ' + word : word;
+                    }
+                }
+                if (subChunk.trim()) {
+                    current = subChunk;
+                }
+            } else {
+                current = part;
+            }
+        } else {
+            current += part;
+        }
+    }
+    
+    if (current.trim()) {
+        chunks.push(current.trim());
+    }
+    
+    return chunks.filter(c => c.length > 0);
+}
+
+const VOICE_NAMES: Record<string, Record<string, string>> = {
+    'priya': {
+        'hindi': 'प्रिया', 'english': 'Priya', 'tamil': 'பிரியா', 'telugu': 'ప్రియ',
+        'kannada': 'ಪ್ರಿಯಾ', 'bengali': 'প্রিয়া', 'malayalam': 'പ്രിയ', 'marathi': 'प्रिया',
+        'gujarati': 'પ્રિયા', 'punjabi': 'ਪ੍ਰਿਆ', 'odia': 'ପ୍ରିୟା', 'assamese': 'প্ৰিয়া'
+    },
+    'neha': {
+        'hindi': 'नेहा', 'english': 'Neha', 'tamil': 'நேகா', 'telugu': 'నేహా',
+        'kannada': 'ನೇಹಾ', 'bengali': 'নেহা', 'malayalam': 'നേഹ', 'marathi': 'नेहा',
+        'gujarati': 'નેહા', 'punjabi': 'ਨੇਹਾ', 'odia': 'ନେହା', 'assamese': 'নেহা'
+    },
+    'kavya': {
+        'hindi': 'काव्या', 'english': 'Kavya', 'tamil': 'காவியா', 'telugu': 'కావ్య',
+        'kannada': 'ಕಾವ್ಯಾ', 'bengali': 'কাব্যা', 'malayalam': 'കാവ്യ', 'marathi': 'काव्या',
+        'gujarati': 'કાવ્યા', 'punjabi': 'ਕਾਵਿਆ', 'odia': 'କାବ୍ୟା', 'assamese': 'কাব্যা'
+    },
+    'anand': {
+        'hindi': 'आनंद', 'english': 'Anand', 'tamil': 'ஆனந்த்', 'telugu': 'ஆనంద్',
+        'kannada': 'ಆನಂದ್', 'bengali': 'आनंद', 'malayalam': 'ആനന്ദ്', 'marathi': 'आनंद',
+        'gujarati': 'આનંદ', 'punjabi': 'ਆਨੰਦ', 'odia': 'ଆନନ୍ଦ', 'assamese': 'ആനന്ദ്'
+    },
+    'rahul': {
+        'hindi': 'राहुल', 'english': 'Rahul', 'tamil': 'ராகுல்', 'telugu': 'రాహుల్',
+        'kannada': 'ರಾಹುಲ್', 'bengali': 'রাহুল', 'malayalam': 'രാഹുൽ', 'marathi': 'राहुल',
+        'gujarati': 'રાહુલ', 'punjabi': 'ਰਾਹੁਲ', 'odia': 'ରାହୁଲ', 'assamese': 'ৰাহুল'
+    },
+    'shubh': {
+        'hindi': 'शुभ', 'english': 'Shubh', 'tamil': 'சுப்', 'telugu': 'శుభ్',
+        'kannada': 'ಶುಭ್', 'bengali': 'শুভ', 'malayalam': 'ശുഭ്', 'marathi': 'शुभ',
+        'gujarati': 'શુભ', 'punjabi': 'ਸ਼ੁਭ', 'odia': 'ଶୁଭ', 'assamese': 'শুভ'
+    }
+};
+
+export function getProcessedSystemPrompt(originalPrompt: string, voiceId: string): string {
+    if (!originalPrompt) return originalPrompt;
+    
+    const voiceLower = voiceId.toLowerCase();
+    const isMale = ['anand', 'rahul', 'shubh'].includes(voiceLower);
+    
+    let englishName = 'Priya';
+    if (voiceLower === 'neha') englishName = 'Neha';
+    else if (voiceLower === 'kavya') englishName = 'Kavya';
+    else if (voiceLower === 'anand') englishName = 'Anand';
+    else if (voiceLower === 'rahul') englishName = 'Rahul';
+    else if (voiceLower === 'shubh') englishName = 'Shubh';
+    
+    let prompt = originalPrompt;
+    
+    prompt = prompt.replace(/\bRiya\b/g, englishName);
+    prompt = prompt.replace(/\briya\b/g, englishName.toLowerCase());
+    prompt = prompt.replace(/\bRIYA\b/g, englishName.toUpperCase());
+    
+    const riyaReplacements: Record<string, string> = {
+        'ria': englishName,
+        'Ria': englishName,
+        'रिया': VOICE_NAMES[voiceLower]?.['hindi'] || englishName,
+        'ரியா': VOICE_NAMES[voiceLower]?.['tamil'] || englishName,
+        'రియా': VOICE_NAMES[voiceLower]?.['telugu'] || englishName,
+        'ರಿಯಾ': VOICE_NAMES[voiceLower]?.['kannada'] || englishName,
+        'রিয়া': VOICE_NAMES[voiceLower]?.['bengali'] || englishName,
+        'റിയ': VOICE_NAMES[voiceLower]?.['malayalam'] || englishName,
+        'રિયા': VOICE_NAMES[voiceLower]?.['gujarati'] || englishName,
+        'ਰੀਆ': VOICE_NAMES[voiceLower]?.['punjabi'] || englishName,
+        'ରିୟା': VOICE_NAMES[voiceLower]?.['odia'] || englishName,
+        'ৰিয়া': VOICE_NAMES[voiceLower]?.['assamese'] || englishName
+    };
+    
+    for (const [key, value] of Object.entries(riyaReplacements)) {
+        prompt = prompt.split(key).join(value);
+    }
+    
+    if (isMale) {
+        prompt = prompt.replace(/\(female, senior sales executive\)/gi, `(male, senior sales executive)`);
+        prompt = prompt.replace(/\bfeminine patterns\b/gi, `masculine patterns`);
+        
+        const verbReplacements: Record<string, string> = {
+            '"kar dungi,"': '"kar dunga,"',
+            '"bata sakti hoon,"': '"bata sakta hoon,"',
+            '"bhej dungi,"': '"bhej dunga,"',
+            '"note kar leti hoon"': '"note kar leta hoon"',
+            'बोल रही हूं': 'बोल रहा हूं',
+            'कर सकती हूं': 'कर सकता हूं',
+            'बोल रही हूँ': 'बोल रहा हूँ',
+            'कर सकती हूँ': 'कर सकता हूँ',
+            'भेज देती हूँ': 'भेज देता हूँ',
+            'भेज देती हूं': 'भेज देता हूं',
+            'करा देती हूँ': 'करा देता हूँ',
+            'करा देती हूं': 'करा देता हूं',
+            'कर देती हूँ': 'कर देता हूँ',
+            'कर देती हूं': 'कर देता हूं',
+            'करती हूँ': 'करता हूँ',
+            'करती हूं': 'करता हूं',
+            'बना देती हूँ': 'बना देता हूँ',
+            'बना देती हूं': 'बना देता हूं',
+            'बोल रही': 'बोल रहा',
+            'कर सकती': 'कर सकता',
+            'करती': 'करता',
+            'बोलती': 'बोलता',
+            'भेज देती': 'भेज देता',
+            'भेज दूंगी': 'भेज दूंगा',
+            'करूँगी': 'करूँगा',
+            'करूंगी': 'करूंगा',
+            'सकती हूँ': 'सकता हूँ',
+            'सकती हूं': 'सकता हूं',
+            'करू शकते': 'करू शकतो',
+            'બોલી રહી છું': 'બોલી રહ્યો છું',
+            'ਬੋਲ ਰਹੀ ਹਾਂ': 'ਬੋਲ ਰਿਹਾ ਹਾਂ',
+            'ਕਰ ਸਕਦੀ ਹਾਂ': 'ਕਰ ਸਕਦਾ ਹਾਂ'
+        };
+        
+        for (const [key, value] of Object.entries(verbReplacements)) {
+            prompt = prompt.split(key).join(value);
+        }
+    }
+    
+    return prompt;
+}
 
 export class UnifiedPipeline {
-    private sarvam = new SarvamAIClient({ apiSubscriptionKey: SARVAM_API_KEY });
-    private bedrock = new BedrockRuntimeClient({ region: LLM_REGION });
-    private bedrockAgent = new BedrockAgentRuntimeClient({ region: LLM_REGION });
-    private history: Array<{ role: string; content: string }> = [];
+    private sarvam: SarvamAIClient;
+    private bedrock: BedrockRuntimeClient;
+    private bedrockAgent: BedrockAgentRuntimeClient;
+    private history: any[] = [];
     private audioBuffer: Buffer[] = [];
     private isActive = false;
     private detectedLang = 'hi-IN';
+    private turnCounter = 0;
 
-    constructor(private socket: Socket, private systemPrompt: string, private voiceId = 'priya') {}
+    constructor(
+        private socket: Socket,
+        private systemPrompt: string,
+        private voiceId = 'priya',
+        private language = 'hindi',
+        private temperature = 0.7,
+        private topP = 0.9,
+        private maxTokens = 512,
+        private enabledTools: string[] = ['search_knowledge_base']
+    ) {
+        const sarvamKey = process.env.SARVAM_API_KEY || '';
+        const llmRegion = process.env.KB_REGION || 'ap-south-1';
+        console.log('[DEBUG] UnifiedPipeline constructor. SARVAM_API_KEY:', sarvamKey ? `${sarvamKey.substring(0, 15)}...` : 'undefined/empty');
+        this.sarvam = new SarvamAIClient({ apiSubscriptionKey: sarvamKey });
+        this.bedrock = new BedrockRuntimeClient({ region: llmRegion });
+        this.bedrockAgent = new BedrockAgentRuntimeClient({ region: llmRegion });
+    }
 
     async start(): Promise<void> {
         this.isActive = true;
-        await this.speak('नमस्ते जी, मैं रिया बोल रही हूं जैन सेल्स कॉर्पोरेशन इंदौर से। आपकी क्या मदद कर सकती हूं?', 'hi-IN');
+        this.turnCounter++;
+        const currentTurn = this.turnCounter;
+        
+        const voiceLower = (this.voiceId || 'priya').toLowerCase();
+        const isMale = ['anand', 'rahul', 'shubh'].includes(voiceLower);
+        
+        let englishName = 'Priya';
+        if (voiceLower === 'neha') englishName = 'Neha';
+        else if (voiceLower === 'kavya') englishName = 'Kavya';
+        else if (voiceLower === 'anand') englishName = 'Anand';
+        else if (voiceLower === 'rahul') englishName = 'Rahul';
+        else if (voiceLower === 'shubh') englishName = 'Shubh';
+
+        const nameHindi = VOICE_NAMES[voiceLower]?.['hindi'] || englishName;
+        const nameEnglish = VOICE_NAMES[voiceLower]?.['english'] || englishName;
+        const nameTamil = VOICE_NAMES[voiceLower]?.['tamil'] || englishName;
+        const nameTelugu = VOICE_NAMES[voiceLower]?.['telugu'] || englishName;
+        const nameKannada = VOICE_NAMES[voiceLower]?.['kannada'] || englishName;
+        const nameBengali = VOICE_NAMES[voiceLower]?.['bengali'] || englishName;
+        const nameMalayalam = VOICE_NAMES[voiceLower]?.['malayalam'] || englishName;
+        const nameMarathi = VOICE_NAMES[voiceLower]?.['marathi'] || englishName;
+        const nameGujarati = VOICE_NAMES[voiceLower]?.['gujarati'] || englishName;
+        const namePunjabi = VOICE_NAMES[voiceLower]?.['punjabi'] || englishName;
+        const nameOdia = VOICE_NAMES[voiceLower]?.['odia'] || englishName;
+        const nameAssamese = VOICE_NAMES[voiceLower]?.['assamese'] || englishName;
+
+        const hindiText = isMale
+            ? `नमस्ते जी, मैं ${nameHindi} बोल रहा हूं प्रिसाइज इंजीनियर्स इंदौर से। आपकी क्या मदद कर सकता हूं?`
+            : `नमस्ते जी, मैं ${nameHindi} बोल रही हूं प्रिसाइज इंजीनियर्स इंदौर से। आपकी क्या मदद कर सकती हूं?`;
+
+        const marathiText = isMale
+            ? `नमस्ते जी, मी प्रिसाइज इंजीनियर्स इंदूरमधून ${nameMarathi} बोलत आहे. मी आपली काय मदत करू शकतो?`
+            : `नमस्ते जी, मी प्रिसाइज इंजीनियर्स इंदूरमधून ${nameMarathi} बोलत आहे. मी आपली काय मदत करू शकते?`;
+
+        const gujaratiText = isMale
+            ? `નમસ્તે જી, હું ઇન્દોરની પ્રિસાઇઝ એન્જિનિયર્સમાંથી ${nameGujarati} બોલી રહ્યો છું. હું તમારી શું મદદ કરી શકું?`
+            : `નમસ્તે જી, હું ઇન્દોરની પ્રિસાઇઝ એન્જિનિયર્સમાંથી ${nameGujarati} બોલી રહી છું. હું તમારી શું મદદ કરી શકું?`;
+
+        const punjabiText = isMale
+            ? `ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ਜੀ, ਮੈਂ ਇੰਦੌਰ ਦੇ ਪ੍ਰਿਸਾਈਜ਼ ਇੰਜੀਨੀਅਰਜ਼ ਤੋਂ ${namePunjabi} ਬੋਲ ਰਿਹਾ ਹਾਂ। ਮੈਂ ਤੁਹਾਡੀ ਕੀ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?`
+            : `ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ਜੀ, ਮੈਂ ਇੰਦੌਰ ਦੇ ਪ੍ਰਿਸਾਈਜ਼ ਇੰਜੀਨੀਅਰਜ਼ ਤੋਂ ${namePunjabi} ਬੋਲ ਰਹੀ ਹਾਂ। ਮੈਂ ਤੁਹਾਡੀ ਕੀ ਮਦਦ ਕਰ ਸਕਦੀ ਹਾਂ?`;
+
+        const greetings: Record<string, { text: string; langCode: string }> = {
+            'hindi': { text: hindiText, langCode: 'hi-IN' },
+            'english': { text: `Hello, this is ${nameEnglish} from Precise Engineers, Indore. How may I help you today?`, langCode: 'en-IN' },
+            'tamil': { text: `வணக்கம், நான் பிரிசைஸ் இன்ஜினியர்ஸ் இந்தூரிலிருந்து ${nameTamil} பேசுகிறேன். உங்களுக்கு எப்படி உதவ முடியும்?`, langCode: 'ta-IN' },
+            'telugu': { text: `నమस्ते अండి, నేను ఇండోర్ లోని ప్రిసైజ్ ఇంజనీర్స్ నుండి ${nameTelugu} మాట్లాడుతున్నాను. నేను మీకు ఎలా సహాయపడగలను?`, langCode: 'te-IN' },
+            'kannada': { text: `ನಮಸ್ತೆ, ನಾನು ಇಂದೋರ್‌ನ ಪ್ರಿಸೈಸ್ ಇಂಜಿನಿಯರ್ಸ್‌ನಿಂದ ${nameKannada} ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?`, langCode: 'kn-IN' },
+            'bengali': { text: `নমস্কার, আমি ইন্দোরের প্রিসাইজ ইঞ্জিনিয়ার্স থেকে ${nameBengali} বলছি। আমি আপনাকে কীভাবে সাহায্য করতে পারি?`, langCode: 'bn-IN' },
+            'malayalam': { text: `നമസ്കാരം, ഞാൻ ഇൻഡോറിലെ പ്രിസൈസ് എഞ്ചിനീയേഴ്സിൽ നിന്ന് ${nameMalayalam} സംസാരിക്കുന്നു. ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കണം?`, langCode: 'ml-IN' },
+            'marathi': { text: marathiText, langCode: 'mr-IN' },
+            'gujarati': { text: gujaratiText, langCode: 'gu-IN' },
+            'punjabi': { text: punjabiText, langCode: 'pa-IN' },
+            'odia': { text: `ନମସ୍କାର, ମୁଁ ଇନ୍ଦୋରର ପ୍ରିସାଇଜ୍ ଇଞ୍ջିନିୟର୍ସରୁ ${nameOdia} କହୁଛି | ମୁଁ ଆପଣଙ୍କୁ କିପରି ସାହାଯ୍ୟ କରିପାରିବି?`, langCode: 'or-IN' },
+            'assamese': { text: `নমস্কাৰ, মই ইন্দোৰৰ প্ৰিসাইজ ইঞ্জিনিয়াৰ্সৰ পৰা ${nameAssamese} কৈছোঁ। মই আপোনাক কিদৰে সহায় কৰিব পাৰোঁ?`, langCode: 'as-IN' }
+        };
+        
+        const selected = (this.language && greetings[this.language.toLowerCase()]) || greetings['hindi'];
+        this.detectedLang = selected.langCode;
+        this.socket.emit('languageDetected', { 
+            languageCode: this.detectedLang, 
+            languageName: getLanguageName(this.detectedLang) 
+        });
+        await this.speak(selected.text, selected.langCode, currentTurn);
         this.socket.emit('sarvamReady');
     }
 
@@ -31,69 +318,387 @@ export class UnifiedPipeline {
     }
 
     async endAudioTurn(): Promise<void> {
+        console.log('[Pipeline] endAudioTurn triggered. Active:', this.isActive, 'Buffer chunks:', this.audioBuffer.length);
         if (!this.isActive || !this.audioBuffer.length) return;
-        const audio = Buffer.concat(this.audioBuffer);
+        this.turnCounter++;
+        const currentTurn = this.turnCounter;
+        const rawAudio = Buffer.concat(this.audioBuffer);
         this.audioBuffer = [];
+        console.log('[Pipeline] Concatenated raw audio size:', rawAudio.length, 'bytes');
+        const audio = addWavHeader(rawAudio, 16000);
+        console.log('[Pipeline] Added WAV header. Total audio size:', audio.length, 'bytes');
         try {
+            console.log('[Pipeline] Sending request to Sarvam speechToText.transcribe with languageCode: unknown...');
             const stt = await (this.sarvam.speechToText as any).transcribe({
                 file: new Blob([audio], { type: 'audio/wav' }),
-                model: 'saaras:v3', languageCode: 'unknown',
+                model: process.env.SARVAM_STT_MODEL || 'saaras:v3',
+                languageCode: 'unknown',
             });
+            console.log('[Pipeline] Sarvam STT response:', JSON.stringify(stt));
             const text: string = stt?.transcript || '';
-            if (!text.trim()) return;
-            if (stt?.languageCode) this.detectedLang = stt.languageCode;
+            if (!text.trim()) {
+                console.log('[Pipeline] STT transcript is empty, returning early.');
+                return;
+            }
+            
+            const detectedCode = stt?.language_code || '';
+            if (detectedCode) {
+                const targetLangName = getLanguageName(detectedCode);
+                const oldCode = this.detectedLang;
+                this.detectedLang = detectedCode;
+                this.language = targetLangName.toLowerCase();
+                
+                if (oldCode.toLowerCase() !== this.detectedLang.toLowerCase()) {
+                    console.log(`[Pipeline] STT dynamically detected language switch: ${detectedCode} (${targetLangName})`);
+                    this.socket.emit('languageDetected', { 
+                        languageCode: this.detectedLang, 
+                        languageName: targetLangName 
+                    });
+                }
+            }
+            
             console.log(`[Pipeline] (${this.detectedLang}): ${text}`);
             this.socket.emit('textOutput', { role: 'user', content: text });
-            const reply = await this.llm(text);
+            const reply = await this.llm(text, currentTurn);
             if (!reply) return;
-            this.socket.emit('textOutput', { role: 'assistant', content: reply });
-            await this.speak(reply, this.detectedLang);
-        } catch (e) {
-            console.error('[Pipeline] Error:', e);
-            this.socket.emit('error', { message: 'Pipeline error', details: String(e) });
+            await this.speak(reply, this.detectedLang, currentTurn);
+        } catch (error) {
+            console.error('[Sarvam] STT/pipeline error:', error);
+            this.socket.emit('error', { message: 'Sarvam processing failed', details: String(error) });
         }
     }
 
-    private async llm(text: string): Promise<string> {
-        this.history.push({ role: 'user', content: text });
-        let prompt = this.systemPrompt;
-        const needsKB = /pump|motor|cable|pipe|price|model|HP|borewell|submersible|kirloskar|CRI|TEXMO|पंप|मोटर|केबल|कीमत/i.test(text);
-        if (needsKB && KB_ID) {
-            try {
-                const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
-                    input: { text },
-                    retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
-                        knowledgeBaseId: KB_ID, modelArn: KB_MODEL_ARN,
-                        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
-                    }}
-                }));
-                if (kb.output?.text) prompt += `\n\nKnowledge Base:\n${kb.output.text}`;
-            } catch(e) { console.error('[Pipeline] KB error:', e); }
-        }
-        const res = await this.bedrock.send(new ConverseCommand({
-            modelId: LLM_MODEL,
-            system: [{ text: prompt }],
-            messages: this.history.map(m => ({ role: m.role as 'user'|'assistant', content: [{ text: m.content }] })),
-            inferenceConfig: { maxTokens: 512, temperature: 0.7 }
-        }));
-        const reply = res.output?.message?.content?.[0]?.text || '';
-        this.history.push({ role: 'assistant', content: reply });
-        return reply;
-    }
-
-    private async speak(text: string, lang: string): Promise<void> {
-        const res = await (this.sarvam.textToSpeech as any).convert({
-            inputs: [text], target_language_code: lang,
-            speaker: this.voiceId, model: 'bulbul:v3', output_audio_format: 'pcm',
-        });
-        if (res?.audios?.[0]) {
-            const buf = Buffer.from(res.audios[0], 'base64');
-            for (let i = 0; i < buf.length; i += 4096)
-                this.socket.emit('audioOutput', { content: buf.slice(i, i + 4096).toString('base64') });
-            this.socket.emit('contentEnd', { type: 'AUDIO' });
-            this.socket.emit('sarvamDone');
+    async handleTextInput(text: string): Promise<void> {
+        console.log('[Pipeline] handleTextInput triggered:', text);
+        if (!this.isActive) return;
+        this.turnCounter++;
+        const currentTurn = this.turnCounter;
+        try {
+            this.socket.emit('textOutput', { role: 'user', content: text });
+            const reply = await this.llm(text, currentTurn);
+            if (!reply) return;
+            await this.speak(reply, this.detectedLang, currentTurn);
+        } catch (error) {
+            console.error('[Sarvam] Text pipeline error:', error);
+            this.socket.emit('error', { message: 'Sarvam text processing failed', details: String(error) });
         }
     }
 
-    stop(): void { this.isActive = false; this.audioBuffer = []; this.history = []; }
+    async updateConfig(data: { 
+        language?: string; 
+        systemPrompt?: string; 
+        voiceId?: string; 
+        temperature?: number; 
+        topP?: number; 
+        maxTokens?: number;
+        enabledTools?: string[];
+    }): Promise<void> {
+        console.log('[Pipeline] updateConfig triggered:', data);
+        if (data.systemPrompt !== undefined) {
+            this.systemPrompt = data.systemPrompt;
+        }
+        if (data.voiceId !== undefined) {
+            this.voiceId = data.voiceId;
+        }
+        if (data.language !== undefined) {
+            this.language = data.language;
+            const languageCodes: Record<string, string> = {
+                'hindi': 'hi-IN', 'english': 'en-IN', 'tamil': 'ta-IN', 'telugu': 'te-IN',
+                'kannada': 'kn-IN', 'bengali': 'bn-IN', 'malayalam': 'ml-IN', 'marathi': 'mr-IN',
+                'gujarati': 'gu-IN', 'punjabi': 'pa-IN', 'odia': 'or-IN', 'assamese': 'as-IN'
+            };
+            const code = languageCodes[data.language.toLowerCase()];
+            if (code) {
+                const oldCode = this.detectedLang;
+                this.detectedLang = code;
+                if (oldCode.toLowerCase() !== code.toLowerCase()) {
+                    this.socket.emit('languageDetected', { 
+                        languageCode: this.detectedLang, 
+                        languageName: getLanguageName(this.detectedLang) 
+                    });
+                }
+            }
+        }
+        if (data.temperature !== undefined) {
+            this.temperature = data.temperature;
+        }
+        if (data.topP !== undefined) {
+            this.topP = data.topP;
+        }
+        if (data.maxTokens !== undefined) {
+            this.maxTokens = data.maxTokens;
+        }
+        if (data.enabledTools !== undefined) {
+            this.enabledTools = data.enabledTools;
+        }
+    }
+
+    private async llm(text: string, turnId: number): Promise<string> {
+        this.history.push({ role: 'user', content: [{ text }] });
+        
+        let prompt = getProcessedSystemPrompt(this.systemPrompt, this.voiceId);
+        prompt += `\n\n**CRITICAL RESPONSE FORMAT RULE (MANDATORY)**:
+You MUST prepend every single response you generate with the appropriate AWS/ISO language code in square brackets, indicating the language you are replying in. Supported codes:
+- English: \`[en-IN]\`
+- Hindi: \`[hi-IN]\`
+- Tamil: \`[ta-IN]\`
+- Telugu: \`[te-IN]\`
+- Kannada: \`[kn-IN]\`
+- Bengali: \`[bn-IN]\`
+- Malayalam: \`[ml-IN]\`
+- Marathi: \`[mr-IN]\`
+- Gujarati: \`[gu-IN]\`
+- Punjabi: \`[pa-IN]\`
+- Odia: \`[or-IN]\`
+- Assamese: \`[as-IN]\`
+
+Example outputs:
+- If replying in Hindi: \`[hi-IN] नमस्ते जी, मैं...\`
+- If replying in Tamil: \`[ta-IN] வணக்கம், நான்...\`
+
+Do NOT output any other text or formatting before this tag.
+Do NOT append English translations or repeat yourself in other languages. Speak ONLY in the target language.
+You MUST reply in the same language that the user spoke in (e.g. if user speaks Marathi, reply in Marathi; if they speak Tamil, reply in Tamil).`;
+        const isKBEnabled = this.enabledTools.includes('search_knowledge_base');
+        
+        const tools = isKBEnabled ? [
+            {
+                toolSpec: {
+                    name: 'search_knowledge_base',
+                    description: 'Call this tool to search the knowledge base for product specifications, recommendations, models, pricing, availability, and comparisons.',
+                    inputSchema: {
+                        json: {
+                            type: 'object',
+                            properties: {
+                                query: {
+                                    type: 'string',
+                                    description: 'The search query to retrieve product details or recommendations'
+                                }
+                            },
+                            required: ['query']
+                        }
+                    }
+                }
+            }
+        ] : [];
+        
+        let loopCount = 0;
+        const maxLoops = 5;
+        
+        while (loopCount < maxLoops) {
+            if (this.turnCounter !== turnId || !this.isActive) return '';
+            loopCount++;
+            
+            const params: any = {
+                modelId: process.env.LLM_MODEL || 'apac.amazon.nova-pro-v1:0',
+                system: [{ text: prompt }],
+                messages: this.history,
+                inferenceConfig: { 
+                    maxTokens: this.maxTokens, 
+                    temperature: this.temperature,
+                    topP: this.topP
+                }
+            };
+            
+            if (tools.length > 0) {
+                params.toolConfig = { tools };
+            }
+            
+            if (this.turnCounter !== turnId || !this.isActive) return '';
+            const res = await this.bedrock.send(new ConverseCommand(params));
+            if (this.turnCounter !== turnId || !this.isActive) return '';
+            
+            const stopReason = res.stopReason;
+            const outputMessage = res.output?.message;
+            if (!outputMessage) {
+                throw new Error('No message output from Bedrock');
+            }
+            
+            // Push output message to history
+            this.history.push({
+                role: outputMessage.role as 'user' | 'assistant',
+                content: outputMessage.content
+            });
+            
+            if (stopReason === 'tool_use') {
+                // Find tool use block
+                const toolUseBlock = outputMessage.content?.find(c => (c as any).toolUse);
+                if (toolUseBlock?.toolUse) {
+                    const { name, toolUseId, input } = toolUseBlock.toolUse;
+                    if (name === 'search_knowledge_base') {
+                        const searchQuery = (input as any).query || text;
+                        console.log('[Pipeline] NATIVE ToolUse triggered:', toolUseId, 'for query:', searchQuery);
+                        
+                        const startTime = Date.now();
+                        this.socket.emit('toolUse', {
+                            toolUseId,
+                            toolName: 'search_knowledge_base',
+                            content: JSON.stringify({ query: searchQuery })
+                        });
+                        
+                        let resultText = 'No results found.';
+                        try {
+                            if (this.turnCounter !== turnId || !this.isActive) return '';
+                            const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
+                                input: { text: searchQuery },
+                                retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
+                                    knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '', modelArn: process.env.KB_MODEL_ARN || '',
+                                    retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
+                                }}
+                            }));
+                            if (this.turnCounter !== turnId || !this.isActive) return '';
+                            resultText = kb.output?.text || 'No results found.';
+                        } catch (e) {
+                            console.error('[Pipeline] Native KB error:', e);
+                            resultText = 'Error calling Knowledge Base: ' + String(e);
+                        }
+                        
+                        const duration = Date.now() - startTime;
+                        this.socket.emit('toolResult', {
+                            toolUseId,
+                            result: JSON.stringify({ result: resultText }),
+                            executionTimeMs: duration
+                        });
+                        
+                        // Push toolResult message to history
+                        this.history.push({
+                            role: 'user',
+                            content: [
+                                {
+                                    toolResult: {
+                                        toolUseId,
+                                        content: [{ text: resultText }],
+                                        status: 'success'
+                                    }
+                                }
+                            ]
+                        });
+                        
+                        // Continue loop to send tool result to LLM
+                        continue;
+                    }
+                }
+            }
+            
+            // If we reached here, it's a normal text output (or final output after tool result)
+            const textBlock = outputMessage.content?.find(c => (c as any).text);
+            let reply = textBlock?.text || '';
+            
+            // Strip reasoning/thinking tags
+            reply = reply.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+            
+            // Extract language code from response prefix
+            const langMatch = reply.trim().match(/^\[([a-zA-Z]{2}-[a-zA-Z]{2})\]\s*(.*)$/s);
+            if (langMatch) {
+                const detectedCode = langMatch[1];
+                reply = langMatch[2];
+                
+                const targetLangName = getLanguageName(detectedCode);
+                const oldCode = this.detectedLang;
+                this.detectedLang = detectedCode;
+                this.language = targetLangName.toLowerCase();
+                
+                if (oldCode.toLowerCase() !== this.detectedLang.toLowerCase()) {
+                    console.log(`[Pipeline] LLM dynamic language switch: ${detectedCode} (${targetLangName})`);
+                    this.socket.emit('languageDetected', { 
+                        languageCode: this.detectedLang, 
+                        languageName: targetLangName 
+                    });
+                }
+            }
+            
+            // Apply standard text stripping regexes just in case
+            reply = reply
+                .replace(/`?search_knowledge_base\(.*?\)`?/gi, '')
+                .replace(/[\*`\s]*(?:tool|knowledge|search|calls|calling)(?: |-|_)?(?:calling|call|output|result|base|knowledge_base|search_knowledge_base)?[\*`\s:-]*/gi, '')
+                .replace(/\((?:[^)]*?(?:मानले|समझा|assuming|based on|derived from|tool|result|knowledge|base|साधन|निकाल|उत्तर|माहिती|information|टूल|परिणाम|जानकारी|आधार)[^)]*?)\)/gi, '')
+                .replace(/[^.!?]*?(?:let me check|look up|please wait|hold on|give me a moment|thank you for waiting|details I have found|here are the details|information I found|calls search_knowledge_base)[^.!?]*?(?:\.|\!|\?|$)/gi, '')
+                .replace(/[^.!?।]*?(?:खोज रहा|ढूंढ रहा|चेक कर|जानकारी लेता|प्रतीक्षा करें|इंतजार करें|रुकें)[^.!?।]*?(?:\.|\!|\?।|$)/gi, '')
+                .replace(/[^.!?।]*?(?:शोधत आहे|शोध घेत आहे|चेक करतो|माहिती मिळवतो|प्रतीक्षा करा|वेળ थांबा|किंचित प्रतीक्षा|उपलब्धता तपासत|वेळ द्या)[^.!?।]*?(?:\.|\!|\?।|$)/gi, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+                
+            return reply;
+        }
+        
+        return '';
+    }
+
+    private async speak(text: string, lang: string, turnId: number): Promise<void> {
+        try {
+            // Split into smaller chunks (150 chars max) to align text & voice streaming speed
+            const chunks = splitTextIntoChunks(text, 150);
+            if (chunks.length === 0) {
+                if (this.turnCounter === turnId) {
+                    this.socket.emit('sarvamDone');
+                }
+                return;
+            }
+            
+            console.log(`[Pipeline] Speak chunks count: ${chunks.length} for language: ${lang}`);
+            
+            // Map chunks to API calls to pre-load/fetch in parallel for zero latency gap
+            const convertPromises = chunks.map(chunk => 
+                (this.sarvam.textToSpeech as any).convert({
+                    inputs: [chunk], target_language_code: lang,
+                    speaker: this.voiceId, model: process.env.SARVAM_TTS_MODEL || 'bulbul:v3', output_audio_format: 'pcm',
+                })
+            );
+            
+            // Process and stream each chunk sequentially in sync with speech duration
+            for (let i = 0; i < chunks.length; i++) {
+                if (!this.isActive || this.turnCounter !== turnId) break;
+                
+                const chunk = chunks[i];
+                const res = await convertPromises[i];
+                
+                if (this.turnCounter !== turnId) break;
+                
+                if (res?.audios?.[0] && this.isActive) {
+                    const buf = Buffer.from(res.audios[0], 'base64');
+                    // durationMs = sampleCount / sampleRate * 1000 = (buf.length / 2) / 24000 * 1000
+                    const durationMs = buf.length / 48;
+                    
+                    // Emit text chunk exactly as speech starts
+                    this.socket.emit('textOutput', { role: 'assistant', content: chunk });
+                    
+                    // Emit audio content chunks
+                    for (let j = 0; j < buf.length; j += 4096) {
+                        if (!this.isActive || this.turnCounter !== turnId) break;
+                        this.socket.emit('audioOutput', { content: buf.slice(j, j + 4096).toString('base64') });
+                    }
+                    
+                    // Sleep for the chunk duration (minus 100ms cushion to prevent client underflow)
+                    // before displaying/speaking the next chunk.
+                    if (i < chunks.length - 1 && this.isActive && this.turnCounter === turnId) {
+                        await new Promise(resolve => setTimeout(resolve, Math.max(0, durationMs - 100)));
+                    }
+                }
+            }
+            
+            if (this.isActive && this.turnCounter === turnId) {
+                this.socket.emit('contentEnd', { type: 'AUDIO' });
+                this.socket.emit('sarvamDone');
+            }
+        } catch (error) {
+            console.error('[Pipeline] TTS speak error:', error);
+            if (this.turnCounter === turnId) {
+                this.socket.emit('error', { message: 'TTS conversion failed', details: String(error) });
+                this.socket.emit('sarvamDone');
+            }
+        }
+    }
+
+    interrupt(): void {
+        this.turnCounter++;
+        this.audioBuffer = [];
+        console.log(`[Pipeline] Interruption triggered. turnCounter is now: ${this.turnCounter}. Cleared audio buffer.`);
+    }
+
+    stop(): void {
+        this.isActive = false;
+        this.turnCounter++;
+        this.audioBuffer = [];
+        this.history = [];
+    }
 }

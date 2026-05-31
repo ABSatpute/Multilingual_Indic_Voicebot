@@ -179,6 +179,74 @@ export class ChatHistoryManager {
         }
     }
 
+    updateUserTranscript(text) {
+        if (!this.chatRef || !this.setChat) return;
+        let history = this.chatRef.current?.history || [];
+        let updatedChatHistory = [...history];
+        
+        // Find the last USER message that has not been finalized (endOfResponse is not true)
+        let lastUserIdx = -1;
+        for (let i = updatedChatHistory.length - 1; i >= 0; i--) {
+            if (updatedChatHistory[i].role === 'USER') {
+                if (!updatedChatHistory[i].endOfResponse) {
+                    lastUserIdx = i;
+                }
+                break;
+            }
+        }
+        
+        if (lastUserIdx !== -1) {
+            updatedChatHistory[lastUserIdx] = {
+                ...updatedChatHistory[lastUserIdx],
+                message: text
+            };
+        } else {
+            updatedChatHistory.push({
+                role: 'USER',
+                message: text
+            });
+        }
+        
+        this.setChat({
+            history: updatedChatHistory
+        });
+    }
+
+    finalizeUserTranscript(text, detectedLanguage) {
+        if (!this.chatRef || !this.setChat) return;
+        let history = this.chatRef.current?.history || [];
+        let updatedChatHistory = [...history];
+        
+        // Find the last USER message to replace it with the final transcript and finalize it
+        let lastUserIdx = -1;
+        for (let i = updatedChatHistory.length - 1; i >= 0; i--) {
+            if (updatedChatHistory[i].role === 'USER') {
+                lastUserIdx = i;
+                break;
+            }
+        }
+        
+        if (lastUserIdx !== -1) {
+            updatedChatHistory[lastUserIdx] = {
+                ...updatedChatHistory[lastUserIdx],
+                message: text,
+                detectedLanguage: detectedLanguage || updatedChatHistory[lastUserIdx].detectedLanguage,
+                endOfResponse: true
+            };
+        } else {
+            updatedChatHistory.push({
+                role: 'USER',
+                message: text,
+                detectedLanguage: detectedLanguage,
+                endOfResponse: true
+            });
+        }
+        
+        this.setChat({
+            history: updatedChatHistory
+        });
+    }
+
     clearHistory() {
         if (!this.chatRef || !this.setChat) {
             console.error("ChatHistoryManager: chatRef or setChat is not initialized");

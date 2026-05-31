@@ -1142,3 +1142,134 @@ html, body {
         font-size: 16px; /* Prevent zoom on iOS */
     }
 }
+
+/* Status Badge Styles */
+.status-badge-container {
+    display: flex;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+    z-index: 10;
+}
+
+.status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.8rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+.status-badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    transition: background 0.3s ease;
+}
+
+.status-badge.active {
+    border-color: var(--primary-light);
+    color: var(--text-primary);
+}
+
+.status-badge.active .status-badge-dot {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success);
+}
+
+.status-badge.kb-calling {
+    border-color: var(--warning);
+    color: var(--text-primary);
+}
+
+.status-badge.kb-calling .status-badge-dot {
+    background: var(--warning);
+    box-shadow: 0 0 8px var(--warning);
+    animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+}
+
+/* Metadata & Inline Status Styles */
+.message-wrapper {
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+    margin: 0.25rem 0;
+}
+
+.message-wrapper.user {
+    align-self: flex-end;
+    align-items: flex-end;
+}
+
+.message-wrapper.assistant {
+    align-self: flex-start;
+    align-items: flex-start;
+}
+
+.message-wrapper .message {
+    max-width: 100%;
+    margin: 0;
+}
+
+.message-sub-info {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-top: 0.25rem;
+    opacity: 0.8;
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    animation: messageSlideIn 0.3s ease;
+}
+
+.kb-inline-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, rgba(168, 85, 247, 0.1) 0%, rgba(99, 102, 241, 0.1) 100%);
+    border: 1px solid rgba(168, 85, 247, 0.25);
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--primary-light);
+    margin: 0.5rem 0;
+    align-self: flex-start;
+    animation: messageSlideIn 0.3s ease;
+    transition: opacity 0.5s ease;
+}
+
+.kb-inline-indicator.completed {
+    border-color: rgba(34, 197, 94, 0.3);
+    color: var(--success);
+}
+
+.kb-inline-indicator.fade-out {
+    opacity: 0;
+}
+
+.kb-inline-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid rgba(168, 85, 247, 0.3);
+    border-top-color: var(--primary-light);
+    border-radius: 50%;
+    animation: toolSpin 0.8s linear infinite;
+}
+
+.kb-inline-check {
+    font-weight: bold;
+    color: var(--success);
+}

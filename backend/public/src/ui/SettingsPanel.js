@@ -9,7 +9,7 @@ const DEFAULT_CONFIG = {
     responseTiming: 'medium',
     outputSampleRate: 24000,
     audioBufferMs: 200,
-    temperature: 1,
+    temperature: 0.4,
     topP: 0.9,
     maxTokens: 2048,
     enabledTools: []

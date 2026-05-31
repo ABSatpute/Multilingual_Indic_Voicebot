@@ -6,7 +6,6 @@ COPY package.json tsconfig.json ./
 RUN npm install
 
 COPY *.ts ./
-COPY tools/ ./tools/
 COPY types/ ./types/
 
 RUN npm run build

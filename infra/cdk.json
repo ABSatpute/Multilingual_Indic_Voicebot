@@ -1,5 +1,5 @@
 {
-    "app": "python3 app.py",
+    "app": "python app.py",
     "watch": {
         "include": [
             "**"
@@ -94,9 +94,6 @@
         "@aws-cdk/s3-notifications:addS3TrustKeyPolicyForSnsSubscriptions": true,
         "@aws-cdk/aws-ec2:requirePrivateSubnetsForEgressOnlyInternetGateway": true,
         "@aws-cdk/aws-s3:publicAccessBlockedByDefault": true,
-        "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true,
-        "knowledgebase": "HN2QJNTWYX",
-        "kb_region": "ap-south-1",
-        "kb_model_arn": "arn:aws:bedrock:ap-south-1:417780655467:inference-profile/apac.amazon.nova-micro-v1:0"
+        "@aws-cdk/aws-lambda:useCdkManagedLogGroup": true
     }
 }

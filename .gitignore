@@ -11,7 +11,9 @@ cdk.context.json
 
 # TypeScript build output
 backend/dist/
-backend/node_modules/
+node_modules/
+.venv/
+frontend/build/
 
 # Python (CDK)
 infra/.venv/

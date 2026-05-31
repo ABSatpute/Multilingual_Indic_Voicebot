@@ -13,6 +13,7 @@ from aws_cdk import (
     aws_cloudfront as cloudfront,
     aws_cloudfront_origins as origins,
 )
+import os
 from constructs import Construct
 from aws_cdk.aws_ecr_assets import Platform
 import cdk_nag
@@ -25,9 +26,9 @@ class InfraStack(Stack):
 
         account = Stack.of(self).account
 
-        kb_id        = self.node.try_get_context("knowledgebase")   # ap-south-1 KB
-        kb_region    = self.node.try_get_context("kb_region")        # ap-south-1
-        kb_model_arn = self.node.try_get_context("kb_model_arn")     # Nova Micro inference profile ARN
+        kb_id        = self.node.try_get_context("knowledgebase") or os.environ.get("KB_KNOWLEDGE_BASE_ID")
+        kb_region    = self.node.try_get_context("kb_region") or os.environ.get("KB_REGION") or "ap-south-1"
+        kb_model_arn = self.node.try_get_context("kb_model_arn") or os.environ.get("KB_MODEL_ARN")
 
         # ── VPC ──────────────────────────────────────────────────────────
         vpc = ec2.Vpc(
@@ -104,15 +105,25 @@ class InfraStack(Stack):
             cpu=1024,
             port_mappings=[ecs.PortMapping(container_port=3000)],
             environment={
-                "AWS_REGION":              "us-east-1",   # Nova Sonic region
+                "AWS_REGION":              "ap-south-1",
                 "KB_REGION":               kb_region,
                 "KB_KNOWLEDGE_BASE_ID":    kb_id,
                 "KB_MODEL_ARN":            kb_model_arn,
-                "SARVAM_API_KEY":          self.node.try_get_context("sarvam_api_key") or "",
+                "LLM_MODEL":               os.environ.get("LLM_MODEL") or "apac.amazon.nova-pro-v1:0",
+                "SARVAM_API_KEY":          self.node.try_get_context("sarvam_api_key") or os.environ.get("SARVAM_API_KEY") or "",
+                "SARVAM_STT_MODEL":        os.environ.get("SARVAM_STT_MODEL") or "saaras:v3",
+                "SARVAM_TTS_MODEL":        os.environ.get("SARVAM_TTS_MODEL") or "bulbul:v3",
                 "PORT":                    "3000",
                 "HOST":                    "0.0.0.0",
+                "ALLOWED_ORIGINS":         self.node.try_get_context("allowed_origins") or os.environ.get("ALLOWED_ORIGINS") or "*",
             },
-            logging=ecs.LogDrivers.aws_logs(stream_prefix="voicebot", log_group=log_group)
+            logging=ecs.LogDrivers.aws_logs(stream_prefix="voicebot", log_group=log_group),
+            health_check=ecs.HealthCheck(
+                command=[
+                    "CMD-SHELL",
+                    "node -e \"require('http').get('http://localhost:3000/health', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1)).on('error', () => process.exit(1))\""
+                ]
+            ),
         )
 
         # ── Security Groups ───────────────────────────────────────────────
