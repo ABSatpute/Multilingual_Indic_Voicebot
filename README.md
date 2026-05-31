@@ -21,20 +21,21 @@ The application leverages Amazon Bedrock for conversational dialogue generation,
 3. [Why This Infrastructure for AI Applications?](#why-this-infrastructure-for-ai-applications)
 4. [Technical Stack](#technical-stack)
 5. [Key Features](#key-features)
-6. [Supported Languages](#supported-languages)
-7. [Repository Structure & File Index](#repository-structure--file-index)
-8. [Local Setup & Configuration](#local-setup--configuration)
+6. [Detailed AI Pipeline & Model Orchestration](#detailed-ai-pipeline--model-orchestration)
+7. [Supported Languages](#supported-languages)
+8. [Repository Structure & File Index](#repository-structure--file-index)
+9. [Local Setup & Configuration](#local-setup--configuration)
    - [Prerequisites](#prerequisites)
    - [1. Set Up Environment Variables](#1-set-up-environment-variables)
    - [2. Local Installation & Run](#2-local-installation--run)
-9. [AWS Deployment (IaC)](#aws-deployment-iac)
-   - [1. Configure the CDK Virtual Environment](#1-configure-the-cdk-virtual-environment)
-   - [2. Deploy Using AWS CDK](#2-deploy-using-aws-cdk)
-   - [3. Tear Down (Stop AWS Charges)](#3-tear-down-stop-aws-charges)
-10. [Maintenance & Operations](#maintenance--operations)
+10. [AWS Deployment (IaC)](#aws-deployment-iac)
+    - [1. Configure the CDK Virtual Environment](#1-configure-the-cdk-virtual-environment)
+    - [2. Deploy Using AWS CDK](#2-deploy-using-aws-cdk)
+    - [3. Tear Down (Stop AWS Charges)](#3-tear-down-stop-aws-charges)
+11. [Maintenance & Operations](#maintenance--operations)
     - [How to Update the Sarvam API Key](#how-to-update-the-sarvam-api-key)
-11. [Troubleshooting FAQ](#troubleshooting-faq)
-12. [License](#license)
+12. [Troubleshooting FAQ](#troubleshooting-faq)
+13. [License](#license)
 
 ---
 
@@ -115,6 +116,31 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 - **Smart Barge-In Prevention:** Software-level acoustic feedback suppression, room noise floor tracking, and consecutive frame verification (4 frames / ~100ms) prevent accidental cutoffs from typing, background fan noise, or speaker echo.
 - **RAG Knowledge Base integration:** The LLM triggers tool calls to search product catalogs stored dynamically in Amazon Bedrock Knowledge Base vector indexes.
 - **Optional Custom Domain Mapping:** Built-in AWS CDK support to map custom domain names (e.g. `voicebot.preciseengineers.com`) through CloudFront and AWS Certificate Manager (ACM).
+
+---
+
+## Detailed AI Pipeline & Model Orchestration
+
+The conversational flow operates sequentially through several distinct AI models and pipeline stages:
+
+1. **Speech-to-Text (STT) & Zero-Shot Language Detection:**
+   * **Model:** Sarvam AI `saaras:v3`
+   * **Process:** The client-side Voice Activity Detection (VAD) monitors user silence. Once turn silence is registered, the server forwards the binary 16-bit PCM audio stream to the Sarvam STT API.
+   * **Language Detection:** By passing `"languageCode": "unknown"`, the API triggers Sarvam's zero-shot acoustic classifier to detect the spoken language. The text transcript and detected locale (e.g. `hi-IN`, `mr-IN`) are returned. The server notifies the client via WebSocket to synchronize UI elements and local recognition settings.
+
+2. **Conversational Reasoning & Intent Processing:**
+   * **Model:** Amazon Bedrock `apac.amazon.nova-pro-v1:0`
+   * **Process:** The backend Converse client receives the user transcript and appends it to the dialog session history.
+   * **Persona Alignment:** The LLM evaluates inputs based on the system prompt instruction templates (`public/prompts/default.md`), structuring sales consultant answers and outputting bracketed language tag prefix instructions (e.g. `[hi-IN]`, `[te-IN]`). The backend intercepts and removes these tag headers to target corresponding voice synthesizers.
+
+3. **Knowledge Retrieval (Retrieval-Augmented Generation / RAG):**
+   * **Model:** Amazon Bedrock Agent Runtime (`RetrieveAndGenerate` command running `apac.amazon.nova-micro-v1:0` against the vector index)
+   * **Process:** When Bedrock identifies technical product specs queries, it triggers a `search_knowledge_base` tool call. The backend halts text generation, runs a semantic cosine similarity query over catalog files in S3, and resubmits the context chunks back to Bedrock to synthesize a factual response.
+
+4. **Speech Synthesis (Text-to-Speech / TTS):**
+   * **Model:** Sarvam AI `bulbul:v3`
+   * **Process:** The final stripped response text is sent to the TTS API. 
+   * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) to synthesize raw speech PCM files, streaming them immediately back to the browser.
 
 ---
 

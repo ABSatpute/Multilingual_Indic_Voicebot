@@ -136,7 +136,32 @@ To ensure clean conversational turns, the client monitors volume Levels (Root Me
 
 The conversational intelligence of the voicebot is driven by a deep integration with **Amazon Bedrock** and **Amazon Bedrock Agent Runtime** using native AWS SDK clients for Node.js. 
 
-### A. Conversational Orchestration (Amazon Bedrock Converse API)
+### A. End-to-End AI Pipeline Flow & Models
+
+The conversational flow operates sequentially through several distinct AI models and pipeline stages:
+
+1. **Speech-to-Text (STT) & Zero-Shot Language Detection:**
+   * **Model:** Sarvam AI `saaras:v3`
+   * **Process:** The client-side Voice Activity Detection (VAD) monitors user silence. Once turn silence is registered, the server forwards the binary 16-bit PCM audio stream to the Sarvam STT API.
+   * **Language Detection:** By passing `"languageCode": "unknown"`, the API triggers Sarvam's zero-shot acoustic classifier to detect the spoken language. The text transcript and detected locale (e.g. `hi-IN`, `mr-IN`) are returned. The server notifies the client via WebSocket to synchronize UI elements and local recognition settings.
+
+2. **Conversational Reasoning & Intent Processing:**
+   * **Model:** Amazon Bedrock `apac.amazon.nova-pro-v1:0`
+   * **Process:** The backend Converse client receives the user transcript and appends it to the dialog session history.
+   * **Persona Alignment:** The LLM evaluates inputs based on the system prompt instruction templates (`public/prompts/default.md`), structuring sales consultant answers and outputting bracketed language tag prefix instructions (e.g. `[hi-IN]`, `[te-IN]`). The backend intercepts and removes these tag headers to target corresponding voice synthesizers.
+
+3. **Knowledge Retrieval (Retrieval-Augmented Generation / RAG):**
+   * **Model:** Amazon Bedrock Agent Runtime (`RetrieveAndGenerate` command running `apac.amazon.nova-micro-v1:0` against the vector index)
+   * **Process:** When Bedrock identifies technical product specs queries, it triggers a `search_knowledge_base` tool call. The backend halts text generation, runs a semantic cosine similarity query over catalog files in S3, and resubmits the context chunks back to Bedrock to synthesize a factual response.
+
+4. **Speech Synthesis (Text-to-Speech / TTS):**
+   * **Model:** Sarvam AI `bulbul:v3`
+   * **Process:** The final stripped response text is sent to the TTS API. 
+   * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) to synthesize raw speech PCM files, streaming them immediately back to the browser.
+
+---
+
+### B. Conversational Orchestration (Amazon Bedrock Converse API)
 The backend uses `@aws-sdk/client-bedrock-runtime` to handle real-time session dialogues.
 * **Model ID:** `apac.amazon.nova-pro-v1:0` (configurable via `LLM_MODEL` environment variable).
 * **Converse Command Structure:** Invokes the `ConverseCommand` API using the following dynamic configuration payload:
@@ -167,7 +192,7 @@ The backend uses `@aws-sdk/client-bedrock-runtime` to handle real-time session d
   }
   ```
 
-### B. Declarative Tool Calling Schema
+### C. Declarative Tool Calling Schema
 When tools are enabled, the server injects the declaration schema for the Knowledge Base directly into the `ConverseCommand` call configuration under the `toolConfig` key:
 
 ```typescript
@@ -193,7 +218,7 @@ const tools = [
 ];
 ```
 
-### C. RAG Execution & Retrieval Loop
+### D. RAG Execution & Retrieval Loop
 If the LLM determines that the user is inquiring about a product model or technical requirement, it pauses text generation and returns a `stopReason` of `'tool_use'`. The backend resolves this in a loop (up to 5 maximum iterations to handle multi-step reasoning):
 
 1. **Detect Tool Call:** The server checks for the tool use intent block in the response payload:
@@ -238,7 +263,7 @@ If the LLM determines that the user is inquiring about a product model or techni
    ```
 4. **Resubmit Context:** The loop runs again, sending the updated message history (including the context injection) back to the Bedrock Converse API, prompting the LLM to generate the final response text.
 
-### D. Socket.IO Events for Real-Time UI Synchronization
+### E. Socket.IO Events for Real-Time UI Synchronization
 To keep the frontend visually in-sync during slow RAG retrievals, the server emits real-time status updates:
 * **`toolUse` Event:** Emitted immediately when the LLM triggers a search, enabling the client UI to show a "searching catalogue..." indicator.
   ```typescript
