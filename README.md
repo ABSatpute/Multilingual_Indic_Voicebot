@@ -1,8 +1,8 @@
 # Multilingual Indic Voicebot for Precise Engineers
 
-A real-time, low-latency automated conversational agent designed to act as **Riya**, the senior inbound sales executive for **Precise Engineers, Indore** (a pump, motor, cable, panel, and pipe distributor). 
+A real-time, low-latency automated conversational sales agent for **Precise Engineers, Indore** (a pump, motor, cable, panel, and pipe distributor). 
 
-This application supports English, Hindi, and 10 regional Indian languages. It uses Amazon Bedrock for dialogue generation, Bedrock Knowledge Base for RAG (Retrieval-Augmented Generation) product queries, and Sarvam AI for Speech-to-Text (STT) and Text-to-Speech (TTS).
+Instead of being locked into a single persona, the assistant dynamically adapts its character profile based on the speaker voice selected by the user. It supports **12 languages** (English, Hindi, and 10 regional Indian languages: Bengali, Tamil, Telugu, Kannada, Malayalam, Marathi, Gujarati, Odia, Punjabi, and Assamese) and offers **6 distinct speaker voices** (3 female: Priya, Neha, Kavya; and 3 male: Anand, Rahul, Shubh) powered by Sarvam AI.
 
 ---
 

@@ -16,7 +16,9 @@ This document provides a comprehensive technical breakdown of the **Multilingual
 ---
 
 ## 2. PROJECT SUMMARY & BUSINESS VALUE
-The voicebot is a real-time, low-latency automated conversational agent designed to act as **Riya**, the senior inbound sales executive for **Precise Engineers, Indore** (a pump, motor, cable, panel, and pipe distributor). 
+The voicebot is a real-time, low-latency automated conversational sales agent for **Precise Engineers, Indore** (a pump, motor, cable, panel, and pipe distributor). 
+
+Instead of using a single hardcoded persona, the voicebot dynamically adapts its character profile based on the active speaker voice chosen in the settings UI. It supports **12 languages** (English, Hindi, and 10 regional Indian languages) and **6 distinct speaker voices** (3 female: Priya, Neha, Kavya; and 3 male: Anand, Rahul, Shubh) powered by Sarvam AI.
 
 ### Key Business Goals:
 1. **Automate Triage:** Filter incoming customer requests into "New Product Sales Inquiries" or "Complaints/Service Requests" (redirections go directly to support head Bikram Ji).
@@ -56,7 +58,7 @@ All voice interactions are routed to **Sarvam AI** endpoints using the API Subsc
 * **Text-to-Speech (TTS) Service:**
   * **Model:** `bulbul:v3`
   * **Endpoint:** `POST https://api.sarvam.ai/text-to-speech`
-  * **Voice / Speaker:** `anand` (for male profile) or `priya` (for female profile).
+  * **Voice / Speaker:** Offers 6 voice choices: 3 female profiles (`priya`, `neha`, `kavya`) and 3 male profiles (`anand`, `rahul`, `shubh`).
   * **Audio Format:** `pcm` at `16000Hz` sample rate.
   * **Key Parameter:** `target_language_code` is dynamically set to match the conversation's active language, ensuring text characters are synthesized using the correct phonetic voice engine.
 
