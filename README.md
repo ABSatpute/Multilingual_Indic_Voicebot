@@ -236,18 +236,6 @@ If your Sarvam API Key expires and you need to deploy a new one:
    ```
 ECS will trigger a zero-downtime rolling deployment, launching a new task with the updated key and shutting down the old one.
 
-### How to Map a Custom Domain
-To assign a custom domain mapping to the voicebot:
-1. Request a public ACM SSL certificate inside the **`us-east-1` (N. Virginia)** region for your target domain (e.g. `voicebot.preciseengineers.com`).
-2. Add your DNS validation CNAME records to verify domain ownership.
-3. Once the certificate is **Issued**, copy its ARN.
-4. Update the root `.env` with:
-   - `CUSTOM_DOMAIN_NAME=voicebot.preciseengineers.com`
-   - `ACM_CERTIFICATE_ARN=arn:aws:acm:us-east-1:<YOUR_AWS_ACCOUNT_ID>:certificate/<CERTIFICATE_ID>`
-5. Run `npx cdk deploy` to update the CloudFront distribution.
-6. Create an Alias (A) or CNAME record in your DNS provider pointing your domain to the output CloudFront domain name (e.g. `<YOUR_DISTRIBUTION_ID>.cloudfront.net`).
-
----
 
 ## License
 
