@@ -115,9 +115,129 @@ To ensure clean conversational turns, the client monitors volume Levels (Root Me
   ```
 * The client decodes the PCM chunks on the fly using Web Audio API nodes for immediate low-latency playback.
 
+
 ---
 
-## 5. LOCAL DEVELOPER ONBOARDING & RUNNING GUIDE
+## 5. AI ENGINE, PROMPT ENGINEERING & RAG TOOL INTEGRATION
+
+The conversational intelligence of the voicebot is driven by a deep integration with **Amazon Bedrock** and **Amazon Bedrock Agent Runtime** using native AWS SDK clients for Node.js. 
+
+### A. Conversational Orchestration (Amazon Bedrock Converse API)
+The backend uses `@aws-sdk/client-bedrock-runtime` to handle real-time session dialogues.
+* **Model ID:** `apac.amazon.nova-pro-v1:0` (configurable via `LLM_MODEL` environment variable).
+* **Converse Command Structure:** Invokes the `ConverseCommand` API using the following dynamic configuration payload:
+  ```typescript
+  const params = {
+      modelId: process.env.LLM_MODEL || 'apac.amazon.nova-pro-v1:0',
+      system: [{ text: systemPromptTemplate }],
+      messages: this.history, // Array of conversation history turns
+      inferenceConfig: { 
+          maxTokens: this.maxTokens || 512, 
+          temperature: this.temperature || 0.7,
+          topP: this.topP || 0.9
+      }
+  };
+  ```
+* **Message History Formatting:** Conversation history is maintained in the standard AWS Converse format:
+  ```typescript
+  interface Message {
+      role: 'user' | 'assistant';
+      content: Array<{
+          text?: string;
+          toolResult?: {
+              toolUseId: string;
+              content: Array<{ text: string }>;
+              status?: 'success' | 'error';
+          };
+      }>;
+  }
+  ```
+
+### B. Declarative Tool Calling Schema
+When tools are enabled, the server injects the declaration schema for the Knowledge Base directly into the `ConverseCommand` call configuration under the `toolConfig` key:
+
+```typescript
+const tools = [
+    {
+        toolSpec: {
+            name: 'search_knowledge_base',
+            description: 'Call this tool to search the knowledge base for product specifications, recommendations, models, pricing, availability, and comparisons.',
+            inputSchema: {
+                json: {
+                    type: 'object',
+                    properties: {
+                        query: {
+                            type: 'string',
+                            description: 'The search query to retrieve product details or recommendations'
+                        }
+                    },
+                    required: ['query']
+                }
+            }
+        }
+    }
+];
+```
+
+### C. RAG Execution & Retrieval Loop
+If the LLM determines that the user is inquiring about a product model or technical requirement, it pauses text generation and returns a `stopReason` of `'tool_use'`. The backend resolves this in a loop (up to 5 maximum iterations to handle multi-step reasoning):
+
+1. **Detect Tool Call:** The server checks for the tool use intent block in the response payload:
+   ```typescript
+   const toolUseBlock = outputMessage.content?.find(c => c.toolUse);
+   if (toolUseBlock?.toolUse?.name === 'search_knowledge_base') {
+       const searchQuery = toolUseBlock.toolUse.input.query;
+       const toolUseId = toolUseBlock.toolUse.toolUseId;
+   }
+   ```
+2. **Execute Bedrock Knowledge Base Retrieval:** The server invokes the `@aws-sdk/client-bedrock-agent-runtime` client, calling the `RetrieveAndGenerateCommand` dynamically:
+   ```typescript
+   const kbResponse = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
+       input: { text: searchQuery },
+       retrieveAndGenerateConfiguration: {
+           type: 'KNOWLEDGE_BASE',
+           knowledgeBaseConfiguration: {
+               knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID,
+               modelArn: process.env.KB_MODEL_ARN, // Embedding & generation model
+               retrievalConfiguration: {
+                   vectorSearchConfiguration: {
+                       numberOfResults: 3 // Restrict context size for low-latency
+                   }
+               }
+           }
+       }
+   }));
+   const resultText = kbResponse.output?.text || 'No results found.';
+   ```
+3. **Inject Results into LLM Context:** The server pushes a `toolResult` block back into the Converse history array, identifying it with the matching `toolUseId` received from the model:
+   ```typescript
+   this.history.push({
+       role: 'user',
+       content: [{
+           toolResult: {
+               toolUseId,
+               content: [{ text: resultText }],
+               status: 'success'
+           }
+       }]
+   });
+   ```
+4. **Resubmit Context:** The loop runs again, sending the updated message history (including the context injection) back to the Bedrock Converse API, prompting the LLM to generate the final response text.
+
+### D. Socket.IO Events for Real-Time UI Synchronization
+To keep the frontend visually in-sync during slow RAG retrievals, the server emits real-time status updates:
+* **`toolUse` Event:** Emitted immediately when the LLM triggers a search, enabling the client UI to show a "searching catalogue..." indicator.
+  ```typescript
+  socket.emit('toolUse', { toolUseId, toolName: 'search_knowledge_base', content: JSON.stringify({ query: searchQuery }) });
+  ```
+* **`toolResult` Event:** Emitted upon database retrieval success to display the search results directly in the client log window.
+  ```typescript
+  socket.emit('toolResult', { toolUseId, result: JSON.stringify({ result: resultText }), executionTimeMs: duration });
+  ```
+
+---
+
+## 6. LOCAL DEVELOPER ONBOARDING & RUNNING GUIDE
 
 ### A. System Prerequisites
 * **Runtime Environments:** Node.js (v20+), Python (v3.11+).
@@ -183,7 +303,7 @@ ALLOWED_ORIGINS=*
 
 ---
 
-## 6. CLOUD INFRASTRUCTURE & IAC REFERENCE (AWS CDK)
+## 7. CLOUD INFRASTRUCTURE & IAC REFERENCE (AWS CDK)
 
 All infrastructure is provisioned programmatically in ap-south-1 via the Python CDK stack (`infra/infra_stack.py`).
 
@@ -238,7 +358,7 @@ All infrastructure is provisioned programmatically in ap-south-1 via the Python 
 
 ---
 
-## 7. MAINTENANCE & TROUBLESHOOTING HANDOVER
+## 8. MAINTENANCE & TROUBLESHOOTING HANDOVER
 
 ### A. Deployment Command
 To redeploy the backend application after making local edits:
