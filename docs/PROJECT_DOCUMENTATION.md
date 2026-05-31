@@ -11,7 +11,7 @@ This document provides a comprehensive technical breakdown of the **Multilingual
 * **Author:** Lead AI Developer / Antigravity Coding Assistant
 * **Target Audience:** Engineering Team, DevOps, Inbound Sales Administrators
 * **Repository:** [ABSatpute/multilingual-indic-voicebot](https://github.com/ABSatpute/multilingual-indic-voicebot)
-* **Production App HTTPS URL:** [https://d15t57ygc4emfz.cloudfront.net](https://d15t57ygc4emfz.cloudfront.net)
+* **Production App HTTPS URL:** `https://<YOUR_CLOUDFRONT_DOMAIN>.cloudfront.net`
 
 ---
 
@@ -66,8 +66,8 @@ All voice interactions are routed to **Sarvam AI** endpoints using the API Subsc
   * **Language Switch Tags:** The LLM is strictly instructed via system prompt to prepend its replies with language bracket tags (e.g., `[hi-IN]`, `[mr-IN]`, `[te-IN]`). The backend intercepts these, strips the brackets for the TTS synthesizer, and emits the language locale update to the browser.
 * **Bedrock Knowledge Base (`RetrieveAndGenerate`):**
   * **Region:** `ap-south-1`
-  * **Knowledge Base ID:** `HN2QJNTWYX`
-  * **Model ARN:** `arn:aws:bedrock:ap-south-1:417780655467:inference-profile/apac.amazon.nova-micro-v1:0`
+  * **Knowledge Base ID:** `<YOUR_BEDROCK_KNOWLEDGE_BASE_ID>`
+  * **Model ARN:** `arn:aws:bedrock:ap-south-1:<YOUR_AWS_ACCOUNT_ID>:inference-profile/apac.amazon.nova-micro-v1:0`
   * **Data Source:** Catalog files stored in S3, indexed with semantic search.
   * **Execution:** Triggered via the `search_knowledge_base` tool definition. The LLM invokes this tool silently when asked technical specifications, and reads the returned details directly from the vector store context.
 
@@ -245,7 +245,56 @@ To keep the frontend visually in-sync during slow RAG retrievals, the server emi
 * **Package Managers:** NPM (v10+), Python `pip` and virtual environments.
 * **Infrastructure Deployments:** AWS CLI v2 (configured with IAM credentials), Docker Desktop.
 
-### B. Repository Structure & Dependency Installation
+### B. Repository Structure & File Index
+
+Below is the complete file layout of the repository, explaining the role of each directory and configuration file:
+
+```text
+multilingual-indic-voicebot/
+├── .env.example                # Template for configuring AWS credentials, Bedrock IDs, and Sarvam API key.
+├── .gitignore                  # Git exclusion rules for node_modules, .venv, CDK output directories, and local secrets.
+├── README.md                   # Main documentation guide (setup, configuration, operations, and technical stack).
+│
+├── backend/                    # TypeScript backend server and static frontend assets.
+│   ├── Dockerfile              # Multi-stage Docker build config optimizing container size for production.
+│   ├── .dockerignore           # Specifies folders/files to exclude from ECR container builds.
+│   ├── package.json            # Node.js project manifest listing dependency libraries and build/start scripts.
+│   ├── tsconfig.json           # Compiler options mapping TypeScript code to target JavaScript standard.
+│   ├── server.ts               # Core web server (Express); initializes Socket.io WebSockets and serves public assets.
+│   ├── SarvamPipeline.ts       # Orchestrator managing audio streams, language detection, tool calls, and LLM conversations.
+│   │
+│   ├── public/                 # Static web client served by the Express server.
+│   │   ├── index.html          # Main HTML structure, layout elements, and visual containers for the voicebot UI.
+│   │   ├── nova-icon.png       # Branding/favicon asset for the web interface.
+│   │   │
+│   │   ├── prompts/
+│   │   │   └── default.md      # Persona prompt instructions for the RAG agent (personality, parameters, boundaries).
+│   │   │
+│   │   └── src/                # Front-end JavaScript, CSS modules, and sub-components.
+│   │       ├── main.js         # Client orchestrator: binds WebSockets, downsamples audio, tracks VAD noise floors.
+│   │       ├── typing.js       # Renders streaming transcription text logs with typing indicators.
+│   │       ├── style.css       # Premium custom styling (glassmorphism UI layout, animations, responsive design).
+│   │       │
+│   │       ├── ui/
+│   │       │   ├── SettingsPanel.js    # Manages settings sidebar events, inputs, defaults, and resets.
+│   │       │   └── WaveformRenderer.js # Visualizes real-time audio amplitudes using dual-overlay HTML5 canvas waves.
+│   │       │
+│   │       └── lib/            # Internal modules handling audio capture, processing, playback, and timing utilities.
+│   │
+│   └── types/                  # Internal TypeScript custom interface definitions.
+│
+├── docs/                       # Project blueprints and deployment artifacts.
+│   └── PROJECT_DOCUMENTATION.md # Comprehensive engineering reference detailing architecture, VAD formulas, and data flows.
+│
+└── infra/                      # Infrastructure as Code (IaC) powered by AWS CDK.
+    ├── app.py                  # CDK application entry point; loads root .env and instantiates the deployment stack.
+    ├── cdk.json                # CDK configuration detailing contexts, feature flags, and compiler mappings.
+    ├── requirements.txt        # Python package dependency list for AWS CDK operations.
+    ├── infra_stack.py          # Provisions AWS resources (VPC, ECS cluster, task definitions, NLB, CloudFront).
+    └── vpc_construct.py        # Configures Custom VPC networks with subnets and ingress/egress controls.
+```
+
+### C. Dependency Installation
 From the root of the project:
 
 1. **Install Root and Backend Dependencies:**
@@ -270,17 +319,17 @@ Create `.env` files in both the **root** folder and **backend/** folder. Use the
 
 ```env
 # AWS Credentials and Region
-AWS_ACCOUNT_ID=417780655467
+AWS_ACCOUNT_ID=<YOUR_AWS_ACCOUNT_ID>
 AWS_DEFAULT_REGION=ap-south-1
 KB_REGION=ap-south-1
 
 # Amazon Bedrock Knowledge Base and Models
-KB_KNOWLEDGE_BASE_ID=HN2QJNTWYX
-KB_MODEL_ARN=arn:aws:bedrock:ap-south-1:417780655467:inference-profile/apac.amazon.nova-micro-v1:0
+KB_KNOWLEDGE_BASE_ID=<YOUR_BEDROCK_KNOWLEDGE_BASE_ID>
+KB_MODEL_ARN=arn:aws:bedrock:ap-south-1:<YOUR_AWS_ACCOUNT_ID>:inference-profile/apac.amazon.nova-micro-v1:0
 LLM_MODEL=apac.amazon.nova-pro-v1:0
 
 # Sarvam AI API Configurations
-SARVAM_API_KEY=sk_cr6sjh1a_xzmMeGLkyWFoO91eCezihBn9
+SARVAM_API_KEY=<YOUR_SARVAM_API_KEY>
 SARVAM_STT_MODEL=saaras:v3
 SARVAM_TTS_MODEL=bulbul:v3
 
@@ -356,7 +405,7 @@ All infrastructure is provisioned programmatically in ap-south-1 via the Python 
 * **Docker Ignore File (`.dockerignore`):** Configured to ignore `node_modules`, `dist`, `.env`, and documentation `.md` files to prevent caching local packages or exposing secrets in the Docker build context.
 * **IAM Least-Privilege Policies:**
   * `bedrock:InvokeModel` and `bedrock:InvokeModelWithResponseStream` on foundation models and inference profiles.
-  * `bedrock:Retrieve` and `bedrock:RetrieveAndGenerate` on the Knowledge Base ARN `arn:aws:bedrock:ap-south-1:417780655467:knowledge-base/HN2QJNTWYX`.
+  * `bedrock:Retrieve` and `bedrock:RetrieveAndGenerate` on the Knowledge Base ARN `arn:aws:bedrock:ap-south-1:<YOUR_AWS_ACCOUNT_ID>:knowledge-base/<YOUR_BEDROCK_KNOWLEDGE_BASE_ID>`.
   * `logs:CreateLogStream` and `logs:PutLogEvents` for Amazon CloudWatch output logs.
 
 ---
@@ -372,7 +421,7 @@ To redeploy the backend application after making local edits:
    ```
 
 ### B. System Health Verification
-* **Endpoint:** `GET https://d15t57ygc4emfz.cloudfront.net/health`
+* **Endpoint:** `GET https://<YOUR_CLOUDFRONT_DOMAIN>.cloudfront.net/health`
 * **Expected Output:**
   ```json
   {
@@ -392,4 +441,4 @@ To redeploy the backend application after making local edits:
    * **Fix:** Confirm CloudFront origin request policies are preserving WebSocket headers. Ensure NLB target group health checks on `/health` (Port 3000) are reporting targets as `Healthy`.
 3. **LLM Silent Tool Call Failures (Missing Specs in Response):**
    * **Symptom:** Bot says *"Iske baare mein main ek baar team se confirm karke..."* on simple catalogue queries.
-   * **Fix:** The Bedrock Knowledge Base vector store requires syncing. Go to the AWS Bedrock Console -> Knowledge Bases -> Select `HN2QJNTWYX` -> Click **Sync** to re-index files from the S3 bucket.
+   * **Fix:** The Bedrock Knowledge Base vector store requires syncing. Go to the AWS Bedrock Console -> Knowledge Bases -> Select `<YOUR_BEDROCK_KNOWLEDGE_BASE_ID>` -> Click **Sync** to re-index files from the S3 bucket.

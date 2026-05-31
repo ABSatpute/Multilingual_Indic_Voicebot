@@ -70,6 +70,57 @@ English · Hindi · Bengali · Tamil · Telugu · Kannada · Malayalam · Marath
 
 ---
 
+## Project Structure & File Index
+
+Below is the complete file layout of the repository, explaining the role of each directory and configuration file:
+
+```text
+multilingual-indic-voicebot/
+├── .env.example                # Template for configuring AWS credentials, Bedrock IDs, and Sarvam API key.
+├── .gitignore                  # Git exclusion rules for node_modules, .venv, CDK output directories, and local secrets.
+├── README.md                   # Main documentation guide (setup, configuration, operations, and technical stack).
+│
+├── backend/                    # TypeScript backend server and static frontend assets.
+│   ├── Dockerfile              # Multi-stage Docker build config optimizing container size for production.
+│   ├── .dockerignore           # Specifies folders/files to exclude from ECR container builds.
+│   ├── package.json            # Node.js project manifest listing dependency libraries and build/start scripts.
+│   ├── tsconfig.json           # Compiler options mapping TypeScript code to target JavaScript standard.
+│   ├── server.ts               # Core web server (Express); initializes Socket.io WebSockets and serves public assets.
+│   ├── SarvamPipeline.ts       # Orchestrator managing audio streams, language detection, tool calls, and LLM conversations.
+│   │
+│   ├── public/                 # Static web client served by the Express server.
+│   │   ├── index.html          # Main HTML structure, layout elements, and visual containers for the voicebot UI.
+│   │   ├── nova-icon.png       # Branding/favicon asset for the web interface.
+│   │   │
+│   │   ├── prompts/
+│   │   │   └── default.md      # Persona prompt instructions for the RAG agent (personality, parameters, boundaries).
+│   │   │
+│   │   └── src/                # Front-end JavaScript, CSS modules, and sub-components.
+│   │       ├── main.js         # Client orchestrator: binds WebSockets, downsamples audio, tracks VAD noise floors.
+│   │       ├── typing.js       # Renders streaming transcription text logs with typing indicators.
+│   │       ├── style.css       # Premium custom styling (glassmorphism UI layout, animations, responsive design).
+│   │       │
+│   │       ├── ui/
+│   │       │   ├── SettingsPanel.js    # Manages settings sidebar events, inputs, defaults, and resets.
+│   │       │   └── WaveformRenderer.js # Visualizes real-time audio amplitudes using dual-overlay HTML5 canvas waves.
+│   │       │
+│   │       └── lib/            # Internal modules handling audio capture, processing, playback, and timing utilities.
+│   │
+│   └── types/                  # Internal TypeScript custom interface definitions.
+│
+├── docs/                       # Project blueprints and deployment artifacts.
+│   └── PROJECT_DOCUMENTATION.md # Comprehensive engineering reference detailing architecture, VAD formulas, and data flows.
+│
+└── infra/                      # Infrastructure as Code (IaC) powered by AWS CDK.
+    ├── app.py                  # CDK application entry point; loads root .env and instantiates the deployment stack.
+    ├── cdk.json                # CDK configuration detailing contexts, feature flags, and compiler mappings.
+    ├── requirements.txt        # Python package dependency list for AWS CDK operations.
+    ├── infra_stack.py          # Provisions AWS resources (VPC, ECS cluster, task definitions, NLB, CloudFront).
+    └── vpc_construct.py        # Configures Custom VPC networks with subnets and ingress/egress controls.
+```
+
+---
+
 ## Local Setup & Configuration
 
 ### Prerequisites
