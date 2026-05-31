@@ -20,6 +20,17 @@ The voicebot is a real-time, low-latency automated conversational sales agent fo
 
 Instead of using a single hardcoded persona, the voicebot dynamically adapts its character profile based on the active speaker voice chosen in the settings UI. It supports **12 languages** (English, Hindi, and 10 regional Indian languages) and **6 distinct speaker voices** (3 female: Priya, Neha, Kavya; and 3 male: Anand, Rahul, Shubh) powered by Sarvam AI.
 
+### Problem Statement
+
+Traditional customer support channels and automated phone IVR menus for regional engineering equipment distributors face major bottlenecks:
+
+1. **The Multilingual Divide:** Regional distributors (such as **Precise Engineers**) serve diverse customer bases across multiple states—including rural farmers, agricultural technicians, and local contractors who communicate primarily in their regional native languages. Hiring and maintaining customer service personnel fluent in 10+ Indic languages is operationally complex and cost-prohibitive.
+2. **Operational Overload from Repetitive Queries:** Up to 70% of inbound inquiries consist of repetitive requests for technical specifications (e.g., pump HP ratings, bore size compatibility, model prices) or basic complaint routing. Sales engineers are frequently distracted by routine triage instead of focusing on high-value business development.
+3. **Frustrating Interaction Barriers:** Traditional IVR menus ("Press 1 for English...") suffer from high customer drop-off rates. Customers want to talk naturally, expect immediate answers without being placed on hold, and often code-switch (mix languages, like English and Hindi) during the same conversation.
+4. **Lack of 24/7 Responsiveness:** Equipment failures and irrigation requirements often occur outside standard business hours. Lacking round-the-clock support directly leads to missed sales inquiries and delayed troubleshooting assistance.
+
+This conversational AI voicebot solves these challenges by combining low-latency WebSockets, zero-shot Indic language auto-switching, dynamic speaker profiles, and automated Bedrock Knowledge Base RAG catalog querying into a single, scalable, and responsive cloud solution.
+
 ### Key Business Goals:
 1. **Automate Triage:** Filter incoming customer requests into "New Product Sales Inquiries" or "Complaints/Service Requests" (redirections go directly to support head Bikram Ji).
 2. **Product Catalog Queries:** Connect customers directly to Precise Engineers' catalog via RAG, answering queries about models, HP ratings, bore size compatibility, and phase requirements without human intervention.
