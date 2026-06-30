@@ -304,9 +304,9 @@ ECS Fargate will trigger a zero-downtime rolling deployment, spinning up a new t
 * **Cause:** The Network Load Balancer (NLB) target groups are listing the ECS containers as `Unhealthy`, or the CloudFront edge proxy is not forwarding raw Socket.io headers.
 * **Solution:** Check your container health in the ECS Console. Verify that the task starts and binds to port `3000` correctly. Ensure the NLB target group path is set to `/health`.
 
-### Q3: The bot replies but fails to fetch product catalog pricing or pump details.
+### Q3: The bot replies but fails to fetch product catalogue pricing or pump details.
 * **Cause:** The Bedrock Knowledge Base vector store is out-of-sync with the S3 data bucket, or permissions on the Task Role are insufficient.
-* **Solution:** Log in to the AWS console, navigate to **Amazon Bedrock -> Knowledge Bases -> [Your KB ID]**, and click **Sync** to re-index the catalog file. Verify `infra_stack.py` grants permissions for `bedrock:Retrieve` and `bedrock:RetrieveAndGenerate`.
+* **Solution:** Log in to the AWS console, navigate to **Amazon Bedrock -> Knowledge Bases -> [Your KB ID]**, and click **Sync** to re-index the catalog file. Verify `infra_stack.py` grants permissions for `bedrock: Retrieve` and `bedrock: RetrieveAndGenerate`.
 
 ---
 
