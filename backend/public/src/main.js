@@ -5,9 +5,8 @@ import { ChatHistoryManager } from "./lib/util/ChatHistoryManager.js";
 // Clear stale config
 const _saved = localStorage.getItem('novaSonicConfig'); if (_saved) { try { const _p = JSON.parse(_saved); if (_p.awsRegion === 'ap-northeast-1') localStorage.removeItem('novaSonicConfig'); } catch(e) {} }
 const socket = io({
-    transports: ['polling']
+    transports: ['websocket', 'polling']
 });
-const SARVAM_LANGUAGES = new Set(["tamil","telugu","kannada","bengali","malayalam","marathi","gujarati","punjabi","odia","assamese"]);
 function isSarvamLanguage(lang) { return true; }
 
 // DOM elements
@@ -111,7 +110,6 @@ const isFirefox = navigator.userAgent.toLowerCase().includes('firefox');
 
 // Configuration state (defaults loaded from server)
 let config = {
-    awsRegion: 'us-east-1',
     systemPrompt: '',
     voiceId: 'priya',
     responseTiming: 'medium',
@@ -129,12 +127,6 @@ let config = {
 
 // Available tools (loaded from server)
 let availableTools = [];
-
-// Available voices
-const voiceData = {
-    tiffany: { name: 'Tiffany', gender: 'female' },
-    matthew: { name: 'Matthew', gender: 'male' }
-};
 
 // Session timeout management (Nova Sonic has 8-minute max connection)
 const SESSION_TIMEOUT_MS = 7 * 60 * 1000; // 7 minutes (warn before 8-min limit)
@@ -232,7 +224,8 @@ async function handleSessionTimeout() {
                 temperature: config.temperature,
                 topP: config.topP,
                 maxTokens: config.maxTokens,
-                enabledTools: config.enabledTools
+                enabledTools: config.enabledTools,
+                outputSampleRate: config.outputSampleRate
             });
             renewDiv.innerHTML = '<span class="renew-icon">✓</span> Session renewed';
             renewDiv.classList.add('success');
@@ -398,9 +391,6 @@ function updateConfigFromSelect(selectId, value) {
     switch (selectId) {
         case 'language-select':
             config.language = value;
-            break;
-        case 'aws-region':
-            config.awsRegion = value;
             break;
         case 'voice-type':
             config.voiceId = value;
@@ -590,7 +580,6 @@ function updateStatusBadges() {
 
 function applyConfigToUI() {
     // Custom dropdowns
-    setCustomSelectValue('aws-region', config.awsRegion);
     setCustomSelectValue('voice-type', config.voiceId);
     setCustomSelectValue('language-select', config.language || 'hindi');
     setCustomSelectValue('response-timing', config.responseTiming);
@@ -639,7 +628,9 @@ function syncSettingsToServer() {
             voiceId: config.voiceId,
             temperature: config.temperature,
             topP: config.topP,
-            maxTokens: config.maxTokens
+            maxTokens: config.maxTokens,
+            enabledTools: config.enabledTools,
+            outputSampleRate: config.outputSampleRate
         });
         socket.emit('sarvamUpdateConfig', {
             language: config.language,
@@ -647,7 +638,9 @@ function syncSettingsToServer() {
             voiceId: config.voiceId,
             temperature: config.temperature,
             topP: config.topP,
-            maxTokens: config.maxTokens
+            maxTokens: config.maxTokens,
+            enabledTools: config.enabledTools,
+            outputSampleRate: config.outputSampleRate
         });
     }
 }
@@ -1200,7 +1193,8 @@ async function startStreaming() {
                 temperature: config.temperature,
                 topP: config.topP,
                 maxTokens: config.maxTokens,
-                enabledTools: config.enabledTools
+                enabledTools: config.enabledTools,
+                outputSampleRate: config.outputSampleRate
             });
             await new Promise((resolve, reject) => {
                 const timeout = setTimeout(() => reject(new Error('Pipeline start timeout')), 15000);
@@ -2100,12 +2094,12 @@ socket.on('textOutput', (data) => {
         return;
     }
 
-    if (role === 'USER') {
+    if (data.role?.toLowerCase() === 'user') {
         hideUserThinkingIndicator();
         transcriptionReceived = true;
         handleTextOutput({ role: data.role, content: data.content });
         showAssistantThinkingIndicator();
-    } else if (role === 'ASSISTANT') {
+    } else if (data.role?.toLowerCase() === 'assistant') {
         // Only show speculative text (real-time), skip final text (avoid duplicates)
         if (displayAssistantText) {
             handleTextOutput({ role: data.role, content: data.content });

@@ -115,11 +115,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error('Chat manager not available. Please refresh the page.');
             }
             
-            // Check if session is initialized
-            if (!window.sessionInitialized) {
-                throw new Error('Please start a voice session first by clicking the microphone button');
-            }
-            
             // Add message to chat
             chatHistoryManager.addTextMessage({
                 role: 'USER',
@@ -135,7 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 window.showAssistantThinkingIndicator();
             }
             
-            // Send to server
+            // Send to server (server auto-starts a text-only pipeline if none exists)
             socket.emit('textInput', { content: message });
             
         } catch (error) {

@@ -36,8 +36,8 @@ const io = new Server(server, {
 // Track active Sarvam pipelines per socket
 const sarvamPipelines = new Map<string, UnifiedPipeline>();
 
-// Serve static files from the public directory
-app.use(express.static(path.join(process.cwd(), 'public')));
+// Serve static files from the public directory (relative to this file, not cwd)
+app.use(express.static(path.join(__dirname, '../public')));
 
 // Socket.IO connection handler
 io.on('connection', (socket) => {
@@ -81,8 +81,9 @@ io.on('connection', (socket) => {
         topP?: number;
         maxTokens?: number;
         enabledTools?: string[];
+        outputSampleRate?: number;
     }) => {
-        console.log('[Server] sarvamStart received from client:', socket.id, 'lang:', data.language);
+        console.log('[Server] sarvamStart received from client:', socket.id, 'lang:', data?.language);
         try {
             const existing = sarvamPipelines.get(socket.id);
             if (existing) { 
@@ -91,13 +92,15 @@ io.on('connection', (socket) => {
             }
             const pipeline = new UnifiedPipeline(
                 socket, 
-                data.systemPrompt, 
-                data.voiceId || 'anand', 
-                data.language || 'hindi',
-                data.temperature,
-                data.topP,
-                data.maxTokens,
-                data.enabledTools
+                typeof data?.systemPrompt === 'string' ? data.systemPrompt.slice(0, 20000) : '',
+                data?.voiceId || 'priya', 
+                data?.language || 'hindi',
+                typeof data?.temperature === 'number' ? Math.min(2, Math.max(0, data.temperature)) : undefined,
+                typeof data?.topP === 'number' ? Math.min(1, Math.max(0, data.topP)) : undefined,
+                typeof data?.maxTokens === 'number' ? Math.min(8192, Math.max(1, Math.floor(data.maxTokens))) : undefined,
+                Array.isArray(data?.enabledTools) ? data.enabledTools : undefined,
+                false,
+                [8000, 16000, 22050, 24000].includes(data?.outputSampleRate) ? data.outputSampleRate : 24000
             );
             sarvamPipelines.set(socket.id, pipeline);
             await pipeline.start();
@@ -131,6 +134,7 @@ io.on('connection', (socket) => {
         topP?: number;
         maxTokens?: number;
         enabledTools?: string[];
+        outputSampleRate?: number;
     }) => {
         console.log('[Server] sarvamUpdateConfig received from client:', socket.id, data);
         try {
@@ -145,12 +149,28 @@ io.on('connection', (socket) => {
 
     // Text input handler (for typing mode)
     socket.on('textInput', async (data) => {
-        console.log('[Server] textInput received from client:', socket.id, 'text:', data.content);
+        const content = typeof data?.content === 'string' ? data.content.trim().slice(0, 2000) : '';
+        if (!content) return;
+        console.log('[Server] textInput received from client:', socket.id, 'text:', content);
         try {
-            const sarvam = sarvamPipelines.get(socket.id);
-            if (sarvam) {
-                await sarvam.handleTextInput(data.content);
+            let sarvam = sarvamPipelines.get(socket.id);
+            if (!sarvam) {
+                // Auto-start a text-only pipeline so typing works without mic session
+                sarvam = new UnifiedPipeline(
+                    socket,
+                    'You are Riya, a helpful multilingual assistant from Precise Engineers, Indore. Answer concisely and clearly.',
+                    'priya',
+                    'hindi',
+                    undefined,
+                    undefined,
+                    undefined,
+                    ['search_knowledge_base'],
+                    true
+                );
+                sarvamPipelines.set(socket.id, sarvam);
+                await sarvam.start();
             }
+            await sarvam.handleTextInput(content);
         } catch (error) {
             console.error('Error processing text input:', error);
             socket.emit('error', {

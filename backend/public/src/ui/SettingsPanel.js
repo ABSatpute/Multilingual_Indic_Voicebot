@@ -3,7 +3,6 @@
  */
 
 const DEFAULT_CONFIG = {
-    awsRegion: 'us-east-1',
     systemPrompt: '',
     voiceId: 'priya',
     responseTiming: 'medium',
@@ -163,9 +162,6 @@ export class SettingsPanel {
             case 'language-select':
                 this.config.language = value;
                 break;
-            case 'aws-region':
-                this.config.awsRegion = value;
-                break;
             case 'voice-type':
                 this.config.voiceId = value;
                 break;
@@ -283,8 +279,8 @@ export class SettingsPanel {
 
     applyConfigToUI() {
         this.setCustomSelectValue('language-select', this.config.language || 'english');
-        this.setCustomSelectValue('aws-region', this.config.awsRegion);
-        this.setCustomSelectValue('voice-type', this.config.voiceId);
+this.setCustomSelectValue('voice-type', this.config.voiceId);
+        this.setCustomSelectValue('language-select', this.config.language || 'hindi');
         this.setCustomSelectValue('response-timing', this.config.responseTiming);
         this.setCustomSelectValue('output-sample-rate', String(this.config.outputSampleRate));
 

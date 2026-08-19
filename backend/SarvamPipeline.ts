@@ -1,4 +1,4 @@
-import { SarvamAIClient } from 'sarvamai';
+﻿import { SarvamAIClient } from 'sarvamai';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } from '@aws-sdk/client-bedrock-agent-runtime';
 import { Socket } from 'socket.io';
@@ -18,11 +18,21 @@ function getLanguageName(code: string): string {
         'mr-in': 'Marathi',
         'gu-in': 'Gujarati',
         'pa-in': 'Punjabi',
-        'or-in': 'Odia',
+        'od-in': 'Odia',
         'as-in': 'Assamese'
     };
     return codes[code.toLowerCase()] || code;
 }
+
+// Map legacy UI voice IDs to Sarvam SDK speakers (bulbul:v2)
+const SDK_SPEAKER_MAP: Record<string, string> = {
+    'priya': 'anushka',
+    'neha': 'manisha',
+    'kavya': 'vidya',
+    'anand': 'abhilash',
+    'rahul': 'karun',
+    'shubh': 'hitesh'
+};
 
 function addWavHeader(pcmBuffer: Buffer, sampleRate: number): Buffer {
     const numChannels = 1;
@@ -53,12 +63,18 @@ function splitTextIntoChunks(text: string, maxLen = 450): string[] {
     const chunks: string[] = [];
     let current = '';
     
+    // Protect punctuation inside numbers (1,500 / 1.5 HP) from being split.
+    // Temporarily replace intra-number comma/dot with a placeholder.
+    const protectedText = text.replace(/(?<=\d)[,.](?=\d)/g, (m) => m === ',' ? '\uE000' : '\uE001');
+    
     // Split by sentence / clause punctuation or newlines
-    const parts = text.split(/([.!?।|,\n]+)/);
+    const parts = protectedText.split(/([.!?।|,\n]+)/);
     
     for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
+        let part = parts[i];
         if (!part) continue;
+        // Restore protected punctuation
+        part = part.replace(/\uE000/g, ',').replace(/\uE001/g, '.');
         
         if ((current + part).length > maxLen) {
             if (current.trim()) {
@@ -114,10 +130,10 @@ const VOICE_NAMES: Record<string, Record<string, string>> = {
         'kannada': 'ಕಾವ್ಯಾ', 'bengali': 'কাব্যা', 'malayalam': 'കാവ്യ', 'marathi': 'काव्या',
         'gujarati': 'કાવ્યા', 'punjabi': 'ਕਾਵਿਆ', 'odia': 'କାବ୍ୟା', 'assamese': 'কাব্যা'
     },
-    'anand': {
-        'hindi': 'आनंद', 'english': 'Anand', 'tamil': 'ஆனந்த்', 'telugu': 'ஆనంద్',
-        'kannada': 'ಆನಂದ್', 'bengali': 'आनंद', 'malayalam': 'ആനന്ദ്', 'marathi': 'आनंद',
-        'gujarati': 'આનંદ', 'punjabi': 'ਆਨੰਦ', 'odia': 'ଆନନ୍ଦ', 'assamese': 'ആനന്ദ്'
+'anand': {
+        'hindi': 'आनंद', 'english': 'Anand', 'tamil': 'ஆனந்த்', 'telugu': 'ఆనంద్',
+        'kannada': 'ಆನಂದ್', 'bengali': 'আনন্দ', 'malayalam': 'ആനന്ദ്', 'marathi': 'आनंद',
+        'gujarati': 'આનંદ', 'punjabi': 'ਆਨੰਦ', 'odia': 'ଆନନ୍ଦ', 'assamese': 'আনন্দ'
     },
     'rahul': {
         'hindi': 'राहुल', 'english': 'Rahul', 'tamil': 'ராகுல்', 'telugu': 'రాహుల్',
@@ -225,6 +241,7 @@ export class UnifiedPipeline {
     private isActive = false;
     private detectedLang = 'hi-IN';
     private turnCounter = 0;
+    private textOnly = false;
 
     constructor(
         private socket: Socket,
@@ -234,11 +251,13 @@ export class UnifiedPipeline {
         private temperature = 0.7,
         private topP = 0.9,
         private maxTokens = 512,
-        private enabledTools: string[] = ['search_knowledge_base']
+        private enabledTools: string[] = ['search_knowledge_base'],
+        textOnly = false,
+        private speechSampleRate = 24000
     ) {
+        this.textOnly = textOnly;
         const sarvamKey = process.env.SARVAM_API_KEY || '';
         const llmRegion = process.env.KB_REGION || 'ap-south-1';
-        console.log('[DEBUG] UnifiedPipeline constructor. SARVAM_API_KEY:', sarvamKey ? `${sarvamKey.substring(0, 15)}...` : 'undefined/empty');
         this.sarvam = new SarvamAIClient({ apiSubscriptionKey: sarvamKey });
         this.bedrock = new BedrockRuntimeClient({ region: llmRegion });
         this.bedrockAgent = new BedrockAgentRuntimeClient({ region: llmRegion });
@@ -292,14 +311,14 @@ export class UnifiedPipeline {
             'hindi': { text: hindiText, langCode: 'hi-IN' },
             'english': { text: `Hello, this is ${nameEnglish} from Precise Engineers, Indore. How may I help you today?`, langCode: 'en-IN' },
             'tamil': { text: `வணக்கம், நான் பிரிசைஸ் இன்ஜினியர்ஸ் இந்தூரிலிருந்து ${nameTamil} பேசுகிறேன். உங்களுக்கு எப்படி உதவ முடியும்?`, langCode: 'ta-IN' },
-            'telugu': { text: `నమस्ते अండి, నేను ఇండోర్ లోని ప్రిసైజ్ ఇంజనీర్స్ నుండి ${nameTelugu} మాట్లాడుతున్నాను. నేను మీకు ఎలా సహాయపడగలను?`, langCode: 'te-IN' },
+            'telugu': { text: `నమస్తే అండి, నేను ఇండోర్ లోని ప్రిసైజ్ ఇంజనీర్స్ నుండి ${nameTelugu} మాట్లాడుతున్నాను. నేను మీకు ఎలా సహాయపడగలను?`, langCode: 'te-IN' },
             'kannada': { text: `ನಮಸ್ತೆ, ನಾನು ಇಂದೋರ್‌ನ ಪ್ರಿಸೈಸ್ ಇಂಜಿನಿಯರ್ಸ್‌ನಿಂದ ${nameKannada} ಮಾತನಾಡುತ್ತಿದ್ದೇನೆ. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?`, langCode: 'kn-IN' },
             'bengali': { text: `নমস্কার, আমি ইন্দোরের প্রিসাইজ ইঞ্জিনিয়ার্স থেকে ${nameBengali} বলছি। আমি আপনাকে কীভাবে সাহায্য করতে পারি?`, langCode: 'bn-IN' },
             'malayalam': { text: `നമസ്കാരം, ഞാൻ ഇൻഡോറിലെ പ്രിസൈസ് എഞ്ചിനീയേഴ്സിൽ നിന്ന് ${nameMalayalam} സംസാരിക്കുന്നു. ഞാൻ നിങ്ങളെ എങ്ങനെ സഹായിക്കണം?`, langCode: 'ml-IN' },
             'marathi': { text: marathiText, langCode: 'mr-IN' },
             'gujarati': { text: gujaratiText, langCode: 'gu-IN' },
             'punjabi': { text: punjabiText, langCode: 'pa-IN' },
-            'odia': { text: `ନମସ୍କାର, ମୁଁ ଇନ୍ଦୋରର ପ୍ରିସାଇଜ୍ ଇଞ୍ջିନିୟର୍ସରୁ ${nameOdia} କହୁଛି | ମୁଁ ଆପଣଙ୍କୁ କିପରି ସାହାଯ୍ୟ କରିପାରିବି?`, langCode: 'or-IN' },
+            'odia': { text: `ନମସ୍କାର, ମୁଁ ଇନ୍ଦୋରର ପ୍ରିସାଇଜ୍ ଇଞ୍ջିନିୟର୍ସରୁ ${nameOdia} କହୁଛି | ମୁଁ ଆପଣଙ୍କୁ କିପରି ସାହାଯ୍ୟ କରିପାରିବି?`, langCode: 'od-IN' },
             'assamese': { text: `নমস্কাৰ, মই ইন্দোৰৰ প্ৰিসাইজ ইঞ্জিনিয়াৰ্সৰ পৰা ${nameAssamese} কৈছোঁ। মই আপোনাক কিদৰে সহায় কৰিব পাৰোঁ?`, langCode: 'as-IN' }
         };
         
@@ -309,12 +328,23 @@ export class UnifiedPipeline {
             languageCode: this.detectedLang, 
             languageName: getLanguageName(this.detectedLang) 
         });
-        await this.speak(selected.text, selected.langCode, currentTurn);
+        if (!this.textOnly) {
+            await this.speak(selected.text, selected.langCode, currentTurn);
+        }
         this.socket.emit('sarvamReady');
     }
 
     async processAudio(data: Buffer): Promise<void> {
-        if (this.isActive) this.audioBuffer.push(data);
+        if (!this.isActive) return;
+        // Cap the audio buffer at ~15 seconds of 16kHz 16-bit mono PCM
+        const MAX_AUDIO_BYTES = 16000 * 2 * 15;
+        this.audioBuffer.push(data);
+        let total = 0;
+        for (const b of this.audioBuffer) total += b.length;
+        while (total > MAX_AUDIO_BYTES && this.audioBuffer.length > 1) {
+            this.audioBuffer.shift();
+            total -= this.audioBuffer[0] ? this.audioBuffer[0].length : 0;
+        }
     }
 
     async endAudioTurn(): Promise<void> {
@@ -328,20 +358,21 @@ export class UnifiedPipeline {
         const audio = addWavHeader(rawAudio, 16000);
         console.log('[Pipeline] Added WAV header. Total audio size:', audio.length, 'bytes');
         try {
-            console.log('[Pipeline] Sending request to Sarvam speechToText.transcribe with languageCode: unknown...');
-            const stt = await (this.sarvam.speechToText as any).transcribe({
+            console.log('[Pipeline] Sending request to Sarvam speechToText.transcribe with language_code: unknown...');
+            const stt: any = await (this.sarvam.speechToText as any).transcribe({
                 file: new Blob([audio], { type: 'audio/wav' }),
-                model: process.env.SARVAM_STT_MODEL || 'saaras:v3',
-                languageCode: 'unknown',
+                model: process.env.SARVAM_STT_MODEL || 'saarika:v2.5',
+                language_code: 'unknown',
             });
-            console.log('[Pipeline] Sarvam STT response:', JSON.stringify(stt));
-            const text: string = stt?.transcript || '';
+            const sttData: any = stt?.data || stt;
+            console.log('[Pipeline] Sarvam STT response:', JSON.stringify(sttData));
+            const text: string = sttData?.transcript || sttData?.text || '';
             if (!text.trim()) {
                 console.log('[Pipeline] STT transcript is empty, returning early.');
                 return;
             }
             
-            const detectedCode = stt?.language_code || '';
+            const detectedCode = sttData?.language_code || '';
             if (detectedCode) {
                 const targetLangName = getLanguageName(detectedCode);
                 const oldCode = this.detectedLang;
@@ -376,7 +407,17 @@ export class UnifiedPipeline {
         try {
             this.socket.emit('textOutput', { role: 'user', content: text });
             const reply = await this.llm(text, currentTurn);
-            if (!reply) return;
+            if (!reply) {
+                this.socket.emit('sarvamDone');
+                return;
+            }
+            if (this.textOnly) {
+                // Text-to-text mode: no TTS, emit the reply as text only
+                this.socket.emit('textOutput', { role: 'assistant', content: reply });
+                this.socket.emit('contentEnd', { type: 'TEXT' });
+                this.socket.emit('sarvamDone');
+                return;
+            }
             await this.speak(reply, this.detectedLang, currentTurn);
         } catch (error) {
             console.error('[Sarvam] Text pipeline error:', error);
@@ -392,6 +433,7 @@ export class UnifiedPipeline {
         topP?: number; 
         maxTokens?: number;
         enabledTools?: string[];
+        outputSampleRate?: number;
     }): Promise<void> {
         console.log('[Pipeline] updateConfig triggered:', data);
         if (data.systemPrompt !== undefined) {
@@ -405,7 +447,7 @@ export class UnifiedPipeline {
             const languageCodes: Record<string, string> = {
                 'hindi': 'hi-IN', 'english': 'en-IN', 'tamil': 'ta-IN', 'telugu': 'te-IN',
                 'kannada': 'kn-IN', 'bengali': 'bn-IN', 'malayalam': 'ml-IN', 'marathi': 'mr-IN',
-                'gujarati': 'gu-IN', 'punjabi': 'pa-IN', 'odia': 'or-IN', 'assamese': 'as-IN'
+                'gujarati': 'gu-IN', 'punjabi': 'pa-IN', 'odia': 'od-IN', 'assamese': 'as-IN'
             };
             const code = languageCodes[data.language.toLowerCase()];
             if (code) {
@@ -431,10 +473,19 @@ export class UnifiedPipeline {
         if (data.enabledTools !== undefined) {
             this.enabledTools = data.enabledTools;
         }
+        if (data.outputSampleRate !== undefined && [8000, 16000, 22050, 24000].includes(data.outputSampleRate)) {
+            this.speechSampleRate = data.outputSampleRate;
+        }
     }
 
     private async llm(text: string, turnId: number): Promise<string> {
         this.history.push({ role: 'user', content: [{ text }] });
+        
+        // Keep history bounded: retain at most the last 20 messages (avoid context overflow / cost growth)
+        const MAX_HISTORY = 20;
+        if (this.history.length > MAX_HISTORY) {
+            this.history = this.history.slice(this.history.length - MAX_HISTORY);
+        }
         
         let prompt = getProcessedSystemPrompt(this.systemPrompt, this.voiceId);
         prompt += `\n\n**CRITICAL RESPONSE FORMAT RULE (MANDATORY)**:
@@ -449,7 +500,7 @@ You MUST prepend every single response you generate with the appropriate AWS/ISO
 - Marathi: \`[mr-IN]\`
 - Gujarati: \`[gu-IN]\`
 - Punjabi: \`[pa-IN]\`
-- Odia: \`[or-IN]\`
+- Odia: \`[od-IN]\`
 - Assamese: \`[as-IN]\`
 
 Example outputs:
@@ -637,11 +688,17 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             
             console.log(`[Pipeline] Speak chunks count: ${chunks.length} for language: ${lang}`);
             
+            const speaker = SDK_SPEAKER_MAP[this.voiceId?.toLowerCase()] || 'anushka';
+            
             // Map chunks to API calls to pre-load/fetch in parallel for zero latency gap
             const convertPromises = chunks.map(chunk => 
                 (this.sarvam.textToSpeech as any).convert({
-                    inputs: [chunk], target_language_code: lang,
-                    speaker: this.voiceId, model: process.env.SARVAM_TTS_MODEL || 'bulbul:v3', output_audio_format: 'pcm',
+                    text: chunk,
+                    target_language_code: lang,
+                    speaker,
+                    model: process.env.SARVAM_TTS_MODEL || 'bulbul:v2',
+                    output_audio_codec: 'linear16',
+                    speech_sample_rate: this.speechSampleRate,
                 })
             );
             
@@ -650,14 +707,16 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                 if (!this.isActive || this.turnCounter !== turnId) break;
                 
                 const chunk = chunks[i];
-                const res = await convertPromises[i];
+                const res: any = await convertPromises[i];
                 
                 if (this.turnCounter !== turnId) break;
                 
-                if (res?.audios?.[0] && this.isActive) {
-                    const buf = Buffer.from(res.audios[0], 'base64');
-                    // durationMs = sampleCount / sampleRate * 1000 = (buf.length / 2) / 24000 * 1000
-                    const durationMs = buf.length / 48;
+                const resData: any = res?.data || res;
+                const audios: string[] = resData?.audios || [];
+                if (audios[0] && this.isActive) {
+                    const buf = Buffer.from(audios[0], 'base64');
+                    // durationMs = sampleCount / sampleRate * 1000 = (buf.length / 2) / sampleRate * 1000
+                    const durationMs = (buf.length / 2) / this.speechSampleRate * 1000;
                     
                     // Emit text chunk exactly as speech starts
                     this.socket.emit('textOutput', { role: 'assistant', content: chunk });

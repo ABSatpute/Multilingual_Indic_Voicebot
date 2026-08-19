@@ -10,7 +10,7 @@ export class ObjectExt {
     }
 
     static checkExists(obj, message) {
-        if (ObjectsExt.exists(obj)) {
+        if (ObjectExt.exists(obj)) {
             throw TypeError(message);
         }
     }
