@@ -361,7 +361,7 @@ export class UnifiedPipeline {
             console.log('[Pipeline] Sending request to Sarvam speechToText.transcribe with language_code: unknown...');
             const stt: any = await (this.sarvam.speechToText as any).transcribe({
                 file: new Blob([audio], { type: 'audio/wav' }),
-                model: process.env.SARVAM_STT_MODEL || 'saarika:v2.5',
+                model: process.env.SARVAM_STT_MODEL || 'saaras:v3',
                 language_code: 'unknown',
             });
             const sttData: any = stt?.data || stt;
