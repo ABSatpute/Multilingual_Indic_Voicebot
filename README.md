@@ -196,7 +196,11 @@ multilingual-indic-voicebot/
     ├── cdk.json                # CDK configuration detailing contexts, feature flags, and compiler mappings.
     ├── requirements.txt        # Python package dependency list for AWS CDK operations.
     ├── infra_stack.py          # Provisions AWS resources (VPC, ECS cluster, task definitions, NLB, CloudFront).
-    └── vpc_construct.py        # Configures Custom VPC networks with subnets and ingress/egress controls.
+    ├── vpc_construct.py        # Configures Custom VPC networks with subnets and ingress/egress controls.
+    │
+    └── oracle/                 # Cost-efficient single-EC2 deployment helpers (no CDK).
+        ├── deploy.sh           # One-shot provisioning: Node.js, build, systemd service, .env setup.
+        └── voicebot.service    # systemd unit running the backend on boot with auto-restart.
 ```
 
 ---
@@ -278,6 +282,49 @@ To delete all compute resources and network setups:
 ```bash
 npx cdk destroy --profile <your-aws-profile>
 ```
+
+---
+
+## Cost-Efficient Deployment (Single EC2 + Cloudflare Tunnel)
+
+The full CDK stack (ECS Fargate + NLB + NAT Gateway + CloudFront) costs roughly **$100+/month**. If you only need the AI services (Amazon Bedrock + Sarvam AI) and want to cut infrastructure spend to near zero, deploy the backend on a **single small EC2 instance** behind a free **Cloudflare Tunnel**:
+
+| Cost item | CDK stack | Single EC2 + Tunnel |
+| :--- | :--- | :--- |
+| Compute | ECS Fargate 1 vCPU/4GB (~$42/mo) | t3.micro (~$0 for 12-mo free tier, ~$6/mo after) |
+| Networking | NLB + NAT Gateway + CloudFront (~$60/mo) | Cloudflare Tunnel (**$0**) |
+| Total infra | ~$100+/mo | **~$0–7/mo** |
+
+### 1. Launch the Instance
+- Region: **ap-south-1** (same as your Bedrock Knowledge Base).
+- Instance type: **t3.micro** (2 vCPU / 1GB, free-tier eligible) or t4g.micro.
+- AMI: **Ubuntu 22.04**.
+- Security group: allow **SSH (22)** inbound only. The Cloudflare Tunnel connects *outbound*, so no web ports need to be exposed.
+
+### 2. Attach the Bedrock IAM Role
+The backend calls Amazon Bedrock using the instance's IAM credentials:
+1. Create a policy allowing `bedrock:InvokeModel`, `bedrock:InvokeModelWithResponseStream`, `bedrock:Retrieve`, and `bedrock:RetrieveAndGenerate` on your Knowledge Base ARN.
+2. Create a role trusting `ec2.amazonaws.com`, attach the policy, add it to an instance profile, and associate it with the instance (`aws ec2 associate-iam-instance-profile`).
+
+### 3. Deploy the Backend
+Upload the backend and run the provided provisioning script (works for GitHub clone, private GitHub with `GITHUB_TOKEN`, or a local copy via `SOURCE_DIR`):
+```bash
+# Local copy mode (no GitHub needed)
+scp -r backend infra/oracle/deploy.sh infra/oracle/voicebot.service ubuntu@<ec2-ip>:~
+ssh ubuntu@<ec2-ip>
+sudo SOURCE_DIR=/home/ubuntu bash deploy.sh
+```
+The script installs Node.js 22, builds the TypeScript, installs a `systemd` service (`voicebot.service`), and auto-starts it on boot.
+
+### 4. Expose Over HTTPS with Cloudflare Tunnel
+Browsers require a secure context for microphone access, so HTTPS is mandatory:
+1. Add your domain to Cloudflare (free plan) and point its nameservers at Cloudflare.
+2. Create a tunnel in **Zero Trust → Networks → Tunnels** and install it on the instance:
+   ```bash
+   sudo cloudflared service install <your-tunnel-token>
+   ```
+3. Add a public hostname route: `voicebot.yourdomain.com → http://localhost:3000` (Type: HTTP).
+4. Verify: `https://voicebot.yourdomain.com/health` returns `{"status":"ok",...}`.
 
 ---
 

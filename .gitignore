@@ -33,3 +33,6 @@ Thumbs.db
 docs/RESUME_ONBOARDING_GUIDE.md
 docs/RESUME_ONBOARDING_GUIDE.txt
 
+# Media / large binaries
+*.mp4
+

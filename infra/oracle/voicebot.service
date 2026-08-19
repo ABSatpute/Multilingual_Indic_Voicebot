@@ -1,0 +1,19 @@
+[Unit]
+Description=Multilingual Indic Voicebot (Express + Socket.io)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/voicebot/backend
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
