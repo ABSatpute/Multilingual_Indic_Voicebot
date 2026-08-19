@@ -25,45 +25,47 @@
         <mxCell id="LegAmber" value="KB retrieval (RAG tool)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;dashed=1;" vertex="1" parent="1">
           <mxGeometry x="1150" y="212" width="180" height="26" as="geometry" />
         </mxCell>
-        <mxCell id="User" value="User" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;fontStyle=1;verticalAlign=bottom;spacingBottom=10;" vertex="1" parent="1">
+        <mxCell id="User" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="60" y="250" width="140" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="Browser" value="Browser&#10;mic capture / text input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;verticalAlign=bottom;spacingBottom=10;" vertex="1" parent="1">
+        <mxCell id="Browser" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
           <mxGeometry x="270" y="250" width="170" height="120" as="geometry" />
         </mxCell>
         <mxCell id="Bk" value="Backend — Node.js + Socket.io" style="swimlane;fontStyle=1;align=center;verticalAlign=top;startSize=36;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000;" vertex="1" parent="1">
           <mxGeometry x="510" y="180" width="740" height="360" as="geometry" />
         </mxCell>
-        <mxCell id="STT" value="STT — Sarvam saaras:v3&#10;transcribe · auto-detect language" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=bottom;spacingBottom=10;" vertex="1" parent="Bk">
+        <mxCell id="STT" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="Bk">
           <mxGeometry x="30" y="70" width="210" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="LLM" value="LLM — Amazon Bedrock Nova Pro&#10;reason + reply" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=bottom;spacingBottom=10;" vertex="1" parent="Bk">
+        <mxCell id="LLM" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="Bk">
           <mxGeometry x="265" y="70" width="210" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="TTS" value="TTS — Sarvam bulbul:v2&#10;synthesize · stream PCM audio" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;verticalAlign=bottom;spacingBottom=10;" vertex="1" parent="Bk">
+        <mxCell id="TTS" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="Bk">
           <mxGeometry x="500" y="70" width="210" height="130" as="geometry" />
         </mxCell>
-        <mxCell id="KB" value="Knowledge Base — RAG&#10;search_knowledge_base tool" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;dashed=1;verticalAlign=bottom;spacingBottom=10;" vertex="1" parent="Bk">
+        <mxCell id="KB" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;dashed=1;" vertex="1" parent="Bk">
           <mxGeometry x="265" y="225" width="210" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="UserIcon" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=;gradientColor=;gradientDirection=north;fillColor=;strokeColor=;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon= mxgraph.aws4.user;" vertex="1" parent="1">
-          <mxGeometry x="108" y="262" width="44" height="44" as="geometry" />
+
+        <mxCell id="UserT" value="&#128100;&#10;&#10;User" style="text;html=1;align=center;verticalAlign=middle;fontSize=13;fontStyle=1;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="65" y="255" width="130" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="BrowserIcon" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=;gradientColor=;gradientDirection=north;fillColor=;strokeColor=;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon= mxgraph.aws4.browser;" vertex="1" parent="1">
-          <mxGeometry x="333" y="262" width="44" height="44" as="geometry" />
+        <mxCell id="BrowserT" value="&#128506;&#10;&#10;Browser&#10;mic capture / text input" style="text;html=1;align=center;verticalAlign=middle;fontSize=12;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="275" y="255" width="160" height="110" as="geometry" />
         </mxCell>
-        <mxCell id="STTIcon" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=;gradientColor=;gradientDirection=north;fillColor=;strokeColor=;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon= mxgraph.aws4.transcribe;" vertex="1" parent="1">
-          <mxGeometry x="623" y="262" width="44" height="44" as="geometry" />
+        <mxCell id="STTT" value="&#127908;&#10;&#10;STT — Sarvam saaras:v3&#10;transcribe · auto-detect" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#333333;" vertex="1" parent="Bk">
+          <mxGeometry x="35" y="75" width="200" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="LLMIcon" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=;gradientColor=;gradientDirection=north;fillColor=;strokeColor=;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon= mxgraph.aws4.bedrock;" vertex="1" parent="1">
-          <mxGeometry x="858" y="262" width="44" height="44" as="geometry" />
+        <mxCell id="LLMT" value="&#129504;&#10;&#10;LLM — Bedrock Nova Pro&#10;reason + reply" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#333333;" vertex="1" parent="Bk">
+          <mxGeometry x="270" y="75" width="200" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="TTSIcon" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=;gradientColor=;gradientDirection=north;fillColor=;strokeColor=;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon= mxgraph.aws4.polly;" vertex="1" parent="1">
-          <mxGeometry x="1093" y="262" width="44" height="44" as="geometry" />
+        <mxCell id="TTST" value="&#128266;&#10;&#10;TTS — Sarvam bulbul:v2&#10;synthesize · stream PCM" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#333333;" vertex="1" parent="Bk">
+          <mxGeometry x="505" y="75" width="200" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="KBIcon" value="" style="sketch=0;points=[[0,0,0],[0.25,0,0],[0.5,0,0],[0.75,0,0],[1,0,0],[0,1,0],[0.25,1,0],[0.5,1,0],[0.75,1,0],[1,1,0],[0,0.25,0],[0,0.5,0],[0,0.75,0],[1,0.25,0],[1,0.5,0],[1,0.75,0]];outlineConnect=0;fontColor=;gradientColor=;gradientDirection=north;fillColor=;strokeColor=;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=12;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon= mxgraph.aws4.generic_database;" vertex="1" parent="1">
-          <mxGeometry x="858" y="417" width="44" height="44" as="geometry" />
+        <mxCell id="KBT" value="&#128221;&#10;&#10;Knowledge Base — RAG&#10;search_knowledge_base tool" style="text;html=1;align=center;verticalAlign=middle;fontSize=11;fontColor=#333333;" vertex="1" parent="Bk">
+          <mxGeometry x="270" y="230" width="200" height="100" as="geometry" />
         </mxCell>
+
         <mxCell id="e1" value="speaks / types" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;strokeWidth=2;" edge="1" parent="1" source="User" target="Browser">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
