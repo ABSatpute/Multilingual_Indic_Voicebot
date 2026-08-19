@@ -1,0 +1,196 @@
+<mxfile host="app.diagrams.net" agent="opencode" version="24.0.0">
+  <diagram id="agent-workflow" name="Agent Workflow">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1180" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="C" value="CLIENT — Browser (Vanilla JS + Web Audio API)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=1;marginBottom=0;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="20" y="40" width="1140" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="B" value="BACKEND — Node.js + Express + Socket.io (UnifiedPipeline)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="20" y="250" width="1140" height="470" as="geometry" />
+        </mxCell>
+        <mxCell id="E" value="EXTERNAL AI SERVICES (Sarvam AI + Amazon Bedrock)" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=1;marginBottom=0;fillColor=#f8cecc;strokeColor=#b85450;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="20" y="750" width="1140" height="150" as="geometry" />
+        </mxCell>
+
+        <mxCell id="C1" value="User selects voice / language / persona (sarvamStart)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="C">
+          <mxGeometry x="40" y="50" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="C2" value="Mic capture → VAD → downsample to 16 kHz PCM" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="C">
+          <mxGeometry x="40" y="120" width="200" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="C3" value="Text input field" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="C">
+          <mxGeometry x="300" y="120" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="C4" value="Render textOutput stream (typing.js) + waveform + language badge" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="C">
+          <mxGeometry x="540" y="120" width="230" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="C5" value="Play audioOutput PCM → Web Audio API (linear16 @ sample rate)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="C">
+          <mxGeometry x="850" y="120" width="240" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="S1" value="Socket.io handlers: sarvamStart, sarvamUpdateConfig, audioInput, textInput, sarvamAudioEnd, interruptAssistant" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="40" y="50" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="S2" value="processAudio() — buffer raw PCM (cap ~15 s)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="40" y="140" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="S3" value="endAudioTurn() (voice) / handleTextInput() (text) → add WAV header" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="40" y="220" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="S4" value="Sarvam STT transcribe: saaras:v3, language_code=&#39;unknown&#39;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="40" y="300" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="S5" value="emit languageDetected + textOutput (user transcript)" style="shape=document;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="B">
+          <mxGeometry x="330" y="60" width="220" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="S6" value="LLM Converse (Nova Pro): history ~8K tokens + persona prompt + [lang] format rule" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="330" y="150" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="S7" value="stopReason == tool_use ?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="B">
+          <mxGeometry x="350" y="260" width="200" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="S8" value="KB RetrieveAndGenerate: search_knowledge_base (3 results, cap 2,000 chars)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="40" y="380" width="240" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="S9" value="push toolResult → loop back to LLM (max 2 rounds)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="330" y="380" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="S10" value="Post-process: strip [lang] tag, update detected language → emit languageDetected" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="640" y="60" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="S11" value="speak(): split 150-char chunks, parallel TTS → stream textOutput + audioOutput (4 KB)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="B">
+          <mxGeometry x="640" y="150" width="250" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="S12" value="emit contentEnd(AUDIO|TEXT) + sarvamDone" style="shape=document;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="B">
+          <mxGeometry x="640" y="240" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="S13" value="interruptAssistant → interrupt() barge-in cancel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="B">
+          <mxGeometry x="640" y="320" width="250" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="E1" value="Sarvam STT API (saaras:v3)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="E">
+          <mxGeometry x="40" y="50" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="E2" value="Amazon Bedrock Converse (apac.amazon.nova-pro-v1:0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="E">
+          <mxGeometry x="330" y="50" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="E3" value="Bedrock Agent Runtime — RetrieveAndGenerate (Nova Micro KB)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="E">
+          <mxGeometry x="620" y="50" width="240" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="E4" value="Sarvam TTS API (bulbul:v2, linear16)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="E">
+          <mxGeometry x="900" y="50" width="220" height="50" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eC1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="C" source="C1" target="C2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eC2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="C" source="C1" target="C3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="B" source="C2" target="S1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="B" source="C3" target="S1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S1" target="S2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S2" target="S3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S3" target="S4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;dashed=1;" edge="1" parent="B" source="S3" target="S6">
+          <mxGeometry relative="1" as="geometry" />
+          <mxCell id="eS6l" value="text path" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="eS6">
+            <mxGeometry x="-0.5" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+        <mxCell id="eS7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S4" target="S5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S4" target="S6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S6" target="S7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;exitX=0;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="B" source="S7" target="S8">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="250" y="300" as="targetPoint" />
+          </mxGeometry>
+          <mxCell id="eS10l" value="yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="eS10">
+            <mxGeometry x="-0.3" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+        <mxCell id="eS11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;dashed=1;" edge="1" parent="B" source="S8" target="S9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;dashed=1;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="B" source="S9" target="S6">
+          <mxGeometry relative="1" as="geometry" />
+          <mxCell id="eS12l" value="loop" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="eS12">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+        <mxCell id="eS13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;exitX=1;exitY=0.5;exitDx=0;exitDy=0;exitPerimeter=0;" edge="1" parent="B" source="S7" target="S10">
+          <mxGeometry relative="1" as="geometry" />
+          <mxCell id="eS13l" value="no" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="eS13">
+            <mxGeometry x="-0.3" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+        <mxCell id="eS14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S10" target="S11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS15" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="B" source="S11" target="S12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eS16" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;dashed=1;" edge="1" parent="B" source="S13" target="S1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eE1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;" edge="1" parent="E" source="S4" target="E1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;dashed=1;" edge="1" parent="E" source="E1" target="S4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;" edge="1" parent="E" source="S6" target="E2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;dashed=1;" edge="1" parent="E" source="E2" target="S7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;" edge="1" parent="E" source="S8" target="E3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;dashed=1;" edge="1" parent="E" source="E3" target="S8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;" edge="1" parent="E" source="S11" target="E4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eE8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#b85450;dashed=1;" edge="1" parent="E" source="E4" target="S11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="eO1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="S12" target="C4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eO2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;dashed=1;" edge="1" parent="1" source="S12" target="C5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="eO3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;dashed=1;" edge="1" parent="1" source="C5" target="S13">
+          <mxGeometry relative="1" as="geometry" />
+          <mxCell id="eO3l" value="barge-in" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="eO3">
+            <mxGeometry x="-0.3" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
