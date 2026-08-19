@@ -1,118 +1,120 @@
 <mxfile host="app.diagrams.net" agent="opencode" version="24.0.0">
   <diagram id="agent-workflow" name="Agent Workflow">
-    <mxGraphModel dx="1000" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="860" pageHeight="900" math="0" shadow="0">
+    <mxGraphModel dx="1400" dy="700" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="700" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
 
-        <mxCell id="N1" value="User speaks or types" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="70" y="40" width="280" height="40" as="geometry" />
-        </mxCell>
-        <mxCell id="N2" value="Browser — capture audio (VAD) / text input" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="70" y="110" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N3" value="Node.js backend — Socket.io receive" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="70" y="190" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N4" value="STT — transcribe (saaras:v3, language auto-detect)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="70" y="270" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N5" value="LLM — generate reply (Nova Pro, history + persona)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="70" y="350" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N6" value="Product lookup needed?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;" vertex="1" parent="1">
-          <mxGeometry x="95" y="430" width="230" height="70" as="geometry" />
-        </mxCell>
-        <mxCell id="N8" value="Reply — strip [lang] tag, emit text" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="70" y="540" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N9" value="TTS — synthesize &amp; stream audio (bulbul:v2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
-          <mxGeometry x="70" y="620" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N10" value="Browser — play audio + render text" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="70" y="700" width="280" height="50" as="geometry" />
-        </mxCell>
-        <mxCell id="N11" value="Turn complete" style="ellipse;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="70" y="780" width="280" height="40" as="geometry" />
+        <mxCell id="User" value="User" style="shape=umlActor;whiteSpace=wrap;html=1;fontSize=14;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="40" y="210" width="70" height="160" as="geometry" />
         </mxCell>
 
-        <mxCell id="S1" value="Sarvam STT API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="520" y="250" width="280" height="50" as="geometry" />
+        <mxCell id="Browser" value="Browser — capture audio / text" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="200" y="260" width="200" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="S2" value="Amazon Bedrock Converse" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="520" y="330" width="280" height="50" as="geometry" />
+
+        <mxCell id="Bk" value="Backend — Node.js" style="swimlane;fontStyle=1;align=center;verticalAlign=top;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;collapsible=1;marginBottom=0;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000;" vertex="1" parent="1">
+          <mxGeometry x="470" y="180" width="700" height="200" as="geometry" />
         </mxCell>
-        <mxCell id="S3" value="Bedrock Knowledge Base (RetrieveAndGenerate)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="520" y="435" width="280" height="50" as="geometry" />
+        <mxCell id="STT" value="STT — transcribe&#10;saaras:v3" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="Bk">
+          <mxGeometry x="30" y="70" width="190" height="60" as="geometry" />
         </mxCell>
-        <mxCell id="S4" value="Sarvam TTS API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
-          <mxGeometry x="520" y="620" width="280" height="50" as="geometry" />
+        <mxCell id="LLM" value="LLM — reply&#10;Nova Pro" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="Bk">
+          <mxGeometry x="240" y="70" width="190" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="TTS" value="TTS — synthesize&#10;bulbul:v2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="Bk">
+          <mxGeometry x="450" y="70" width="190" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="SarvamSTT" value="Sarvam STT API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="500" y="450" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="Bedrock" value="Amazon Bedrock&#10;Nova Pro + Knowledge Base" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="710" y="450" width="190" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="SarvamTTS" value="Sarvam TTS API" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="920" y="450" width="190" height="50" as="geometry" />
         </mxCell>
 
         <mxCell id="L1" value="Legend" style="text;html=1;align=left;verticalAlign=top;fontStyle=1;" vertex="1" parent="1">
-          <mxGeometry x="520" y="720" width="80" height="20" as="geometry" />
+          <mxGeometry x="1150" y="520" width="120" height="20" as="geometry" />
         </mxCell>
         <mxCell id="L2" value="Browser" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="520" y="750" width="120" height="30" as="geometry" />
+          <mxGeometry x="1150" y="550" width="140" height="30" as="geometry" />
         </mxCell>
         <mxCell id="L3" value="Backend" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="520" y="790" width="120" height="30" as="geometry" />
+          <mxGeometry x="1150" y="590" width="140" height="30" as="geometry" />
         </mxCell>
         <mxCell id="L4" value="External service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;" vertex="1" parent="1">
-          <mxGeometry x="520" y="830" width="120" height="30" as="geometry" />
+          <mxGeometry x="1150" y="630" width="140" height="30" as="geometry" />
         </mxCell>
 
-        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="N1" target="N2">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="N2" target="N3">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="1" source="N3" target="N4">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="1" source="N4" target="N5">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="1" source="N5" target="N6">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="1" source="N6" target="N8">
-          <mxGeometry relative="1" as="geometry" />
-          <mxCell id="e6l" value="no" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e6">
-            <mxGeometry x="-0.1" relative="1" as="geometry" />
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="User" target="Browser">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="120" y="290" as="sourcePoint" />
+            <mxPoint x="200" y="290" as="targetPoint" />
+          </mxGeometry>
+          <mxCell id="e1l" value="speaks / types" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e1">
+            <mxGeometry x="-0.3" relative="1" as="geometry" />
           </mxCell>
         </mxCell>
-        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="1" source="N8" target="N9">
+        <mxCell id="e2" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="Browser" target="STT">
           <mxGeometry relative="1" as="geometry" />
+          <mxCell id="e2l" value="Socket.io&#10;audio/text" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e2">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
+          </mxCell>
         </mxCell>
-        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="1" source="N9" target="N10">
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="Bk" source="STT" target="LLM">
           <mxGeometry relative="1" as="geometry" />
+          <mxCell id="e3l" value="transcript" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e3">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
+          </mxCell>
         </mxCell>
-        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="N10" target="N11">
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#82b366;" edge="1" parent="Bk" source="LLM" target="TTS">
           <mxGeometry relative="1" as="geometry" />
+          <mxCell id="e4l" value="reply text" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e4">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
+          </mxCell>
         </mxCell>
 
-        <mxCell id="e10" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="N4" target="S1">
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="STT" target="SarvamSTT">
           <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="N5" target="S2">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="e12" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;" edge="1" parent="1" source="N6" target="S3">
-          <mxGeometry relative="1" as="geometry" />
-          <mxCell id="e12l" value="yes" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e12">
-            <mxGeometry x="-0.1" relative="1" as="geometry" />
+          <mxCell id="e5l" value="transcribe" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e5">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
           </mxCell>
         </mxCell>
-        <mxCell id="e13" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;dashed=1;" edge="1" parent="1" source="S3" target="N5">
+        <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="LLM" target="Bedrock">
           <mxGeometry relative="1" as="geometry" />
-          <mxCell id="e13l" value="tool result" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e13">
-            <mxGeometry x="-0.1" relative="1" as="geometry" />
+          <mxCell id="e6l" value="converse / tool call" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e6">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
           </mxCell>
         </mxCell>
-        <mxCell id="e14" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="N9" target="S4">
+        <mxCell id="e7" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#d79b00;dashed=1;" edge="1" parent="1" source="Bedrock" target="LLM">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="885" y="420" as="sourcePoint" />
+            <mxPoint x="805" y="250" as="targetPoint" />
+          </mxGeometry>
+          <mxCell id="e7l" value="tool result&#10;(&#8804;2 rounds)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e7">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+        <mxCell id="e8" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#9673a6;" edge="1" parent="1" source="TTS" target="SarvamTTS">
           <mxGeometry relative="1" as="geometry" />
+          <mxCell id="e8l" value="synthesize" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e8">
+            <mxGeometry x="-0.2" relative="1" as="geometry" />
+          </mxCell>
+        </mxCell>
+
+        <mxCell id="e9" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;strokeColor=#6c8ebf;" edge="1" parent="1" source="TTS" target="User">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1015" y="560" />
+              <mxPoint x="75" y="560" />
+            </Array>
+          </mxGeometry>
+          <mxCell id="e9l" value="stream audio + text reply" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="e9">
+            <mxGeometry x="-0.1" relative="1" as="geometry" />
+          </mxCell>
         </mxCell>
       </root>
     </mxGraphModel>
