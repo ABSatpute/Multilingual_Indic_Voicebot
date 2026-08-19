@@ -198,7 +198,7 @@ multilingual-indic-voicebot/
     ├── infra_stack.py          # Provisions AWS resources (VPC, ECS cluster, task definitions, NLB, CloudFront).
     ├── vpc_construct.py        # Configures Custom VPC networks with subnets and ingress/egress controls.
     │
-    └── oracle/                 # Cost-efficient single-EC2 deployment helpers (no CDK).
+    └── ec2/                      # Cost-efficient single-EC2 deployment helpers (no CDK).
         ├── deploy.sh           # One-shot provisioning: Node.js, build, systemd service, .env setup.
         └── voicebot.service    # systemd unit running the backend on boot with auto-restart.
 ```
@@ -310,7 +310,7 @@ The backend calls Amazon Bedrock using the instance's IAM credentials:
 Upload the backend and run the provided provisioning script (works for GitHub clone, private GitHub with `GITHUB_TOKEN`, or a local copy via `SOURCE_DIR`):
 ```bash
 # Local copy mode (no GitHub needed)
-scp -r backend infra/oracle/deploy.sh infra/oracle/voicebot.service ubuntu@<ec2-ip>:~
+scp -r backend infra/ec2/deploy.sh infra/ec2/voicebot.service ubuntu@<ec2-ip>:~
 ssh ubuntu@<ec2-ip>
 sudo SOURCE_DIR=/home/ubuntu bash deploy.sh
 ```

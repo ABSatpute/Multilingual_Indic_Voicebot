@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# One-shot deploy script for the Multilingual Indic Voicebot on an Oracle Cloud
-# Free Tier ARM instance (Ubuntu 22.04, Mumbai / ap-south-1).
+# One-shot deploy script for the Multilingual Indic Voicebot on an Ubuntu server
+# (EC2 t3.micro/t4g.micro, Lightsail, or any Ubuntu 22.04 box).
 #
 # Usage:
 #   sudo bash deploy.sh                                  # use GitHub (public repo)
