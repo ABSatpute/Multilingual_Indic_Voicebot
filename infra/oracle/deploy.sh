@@ -22,7 +22,7 @@
 set -euo pipefail
 
 APP_DIR="/opt/voicebot"
-REPO_URL="https://github.com/ABSatpute/multilingual-indic-voicebot.git"
+REPO_URL="https://github.com/ABSatpute/Multilingual_Indic_Voicebot.git"
 SERVICE_FILE="/etc/systemd/system/voicebot.service"
 NODE_MAJOR="22"
 
@@ -49,7 +49,7 @@ elif [[ ! -d "${APP_DIR}" ]]; then
   echo "==> Cloning repository into ${APP_DIR}..."
   mkdir -p "${APP_DIR}"
   if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-    git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/ABSatpute/multilingual-indic-voicebot.git" "${APP_DIR}"
+    git clone "https://x-access-token:${GITHUB_TOKEN}@github.com/ABSatpute/Multilingual_Indic_Voicebot.git" "${APP_DIR}"
     git -C "${APP_DIR}" remote set-url origin "${REPO_URL}"
     git -C "${APP_DIR}" config credential.helper "store --file ${APP_DIR}/.git-credentials"
     echo "https://x-access-token:${GITHUB_TOKEN}@github.com" > "${APP_DIR}/.git-credentials"
