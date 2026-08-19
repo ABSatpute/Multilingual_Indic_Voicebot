@@ -9,6 +9,8 @@
 
 A real-time, low-latency automated conversational sales agent for **Precise Engineers, Indore** (a pump, motor, cable, panel, and pipe distributor). 
 
+**Live demo:** https://voicebot.indicvoicebot.online (deployed on a single EC2 instance behind a Cloudflare Tunnel; see [Cost-Efficient Deployment](#cost-efficient-deployment-single-ec2--cloudflare-tunnel)). 
+
 Instead of being locked into a single persona, the assistant dynamically adapts its character profile based on the speaker voice selected by the user. It supports **12 languages** (English, Hindi, and 10 regional Indian languages) and offers **6 distinct speaker voices** (3 female: Priya, Neha, Kavya; and 3 male: Anand, Rahul, Shubh) powered by Sarvam AI.
 
 The application leverages Amazon Bedrock for conversational dialogue generation, Bedrock Knowledge Base for RAG (Retrieval-Augmented Generation) product queries, and Sarvam AI for Speech-to-Text (STT) and Text-to-Speech (TTS) pipelines.
@@ -101,7 +103,7 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 |---|---|
 | **Programming Languages** | TypeScript (Backend / Node.js v22), ES6 JavaScript (Client), Python (AWS CDK) |
 | **Backend Framework** | Express + Socket.io (Low-latency WebSockets) |
-| **Speech APIs** | **Sarvam AI** (`saaras:v3` for STT, `bulbul:v3` for TTS) |
+| **Speech APIs** | **Sarvam AI** (`saaras:v3` for STT, `bulbul:v2` for TTS) |
 | **LLM & RAG** | Amazon Bedrock (`nova-pro-v1:0` for LLM, `nova-micro-v1:0` for Knowledge Base queries) |
 | **Client Frontend** | Vanilla HTML5 Canvas (Waveform rendering) + Web Audio API (PCM streaming) |
 | **Infrastructure (IaC)** | AWS CDK (Python) |
@@ -112,7 +114,7 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 
 ## Key Features
 
-- **Language Auto-Switching:** Zero-shot language detection via Sarvam's `languageCode: "unknown"` parameter dynamically switches both the backend LLM synthesis and browser Speech Recognition to the user's spoken language locale.
+- **Language Auto-Switching:** Zero-shot language detection via Sarvam's `language_code: "unknown"` parameter dynamically switches both the backend LLM synthesis and browser Speech Recognition to the user's spoken language locale.
 - **Smart Barge-In Prevention:** Software-level acoustic feedback suppression, room noise floor tracking, and consecutive frame verification (4 frames / ~100ms) prevent accidental cutoffs from typing, background fan noise, or speaker echo.
 - **RAG Knowledge Base integration:** The LLM triggers tool calls to search product catalogs stored dynamically in Amazon Bedrock Knowledge Base vector indexes.
 - **Optional Custom Domain Mapping:** Built-in AWS CDK support to map custom domain names (e.g. `voicebot.preciseengineers.com`) through CloudFront and AWS Certificate Manager (ACM).
@@ -126,7 +128,7 @@ The conversational flow operates sequentially through several distinct AI models
 1. **Speech-to-Text (STT) & Zero-Shot Language Detection:**
    * **Model:** Sarvam AI `saaras:v3`
    * **Process:** The client-side Voice Activity Detection (VAD) monitors user silence. Once turn silence is registered, the server forwards the binary 16-bit PCM audio stream to the Sarvam STT API.
-   * **Language Detection:** By passing `"languageCode": "unknown"`, the API triggers Sarvam's zero-shot acoustic classifier to detect the spoken language. The text transcript and detected locale (e.g. `hi-IN`, `mr-IN`) are returned. The server notifies the client via WebSocket to synchronize UI elements and local recognition settings.
+   * **Language Detection:** By passing `"language_code": "unknown"`, the API triggers Sarvam's zero-shot acoustic classifier to detect the spoken language. The text transcript and detected locale (e.g. `hi-IN`, `mr-IN`) are returned. The server notifies the client via WebSocket to synchronize UI elements and local recognition settings.
 
 2. **Conversational Reasoning & Intent Processing:**
    * **Model:** Amazon Bedrock `apac.amazon.nova-pro-v1:0`
@@ -138,9 +140,9 @@ The conversational flow operates sequentially through several distinct AI models
    * **Process:** When Bedrock identifies technical product specs queries, it triggers a `search_knowledge_base` tool call. The backend halts text generation, runs a semantic cosine similarity query over catalog files in S3, and resubmits the context chunks back to Bedrock to synthesize a factual response.
 
 4. **Speech Synthesis (Text-to-Speech / TTS):**
-   * **Model:** Sarvam AI `bulbul:v3`
+   * **Model:** Sarvam AI `bulbul:v2`
    * **Process:** The final stripped response text is sent to the TTS API. 
-   * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) to synthesize raw speech PCM files, streaming them immediately back to the browser.
+   * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) — internally mapped to Sarvam SDK speaker IDs (`anushka`, `abhilash`, `karun`, etc.) — to synthesize raw speech PCM files, streaming them immediately back to the browser.
 
 ---
 
@@ -160,6 +162,10 @@ multilingual-indic-voicebot/
 ├── .gitignore                  # Git exclusion rules for node_modules, .venv, CDK output directories, and local secrets.
 ├── README.md                   # Main documentation guide (setup, configuration, operations, and technical stack).
 │
+├── .github/
+│   └── workflows/
+│       └── deploy.yml          # GitHub Actions CI/CD: auto-deploys backend to EC2 on push to main.
+│
 ├── backend/                    # TypeScript backend server and static frontend assets.
 │   ├── Dockerfile              # Multi-stage Docker build config optimizing container size for production.
 │   ├── .dockerignore           # Specifies folders/files to exclude from ECR container builds.
@@ -172,8 +178,11 @@ multilingual-indic-voicebot/
 │   │   ├── index.html          # Main HTML structure, layout elements, and visual containers for the voicebot UI.
 │   │   ├── nova-icon.png       # Branding/favicon asset for the web interface.
 │   │   │
-│   │   ├── prompts/
-│   │   │   └── default.md      # Persona prompt instructions for the RAG agent (personality, parameters, boundaries).
+│   │   ├── prompts/            # Persona prompt templates selectable from the UI.
+│   │   │   ├── default.md      # Default RAG sales-agent persona (personality, parameters, boundaries).
+│   │   │   ├── insurance_service.md   # Insurance-service persona preset.
+│   │   │   ├── intelligent_assistant.md # General intelligent-assistant persona preset.
+│   │   │   └── tutor.md        # Tutoring persona preset.
 │   │   │
 │   │   └── src/                # Front-end JavaScript, CSS modules, and sub-components.
 │   │       ├── main.js         # Client orchestrator: binds WebSockets, downsamples audio, tracks VAD noise floors.
@@ -189,6 +198,8 @@ multilingual-indic-voicebot/
 │   └── types/                  # Internal TypeScript custom interface definitions.
 │
 ├── docs/                       # Project blueprints and deployment artifacts.
+│   ├── A1-environment-setup.md # Environment setup guide.
+│   ├── A2-aws-account-setup.md # AWS account preparation guide.
 │   └── PROJECT_DOCUMENTATION.md # Comprehensive engineering reference detailing architecture, VAD formulas, and data flows.
 │
 └── infra/                      # Infrastructure as Code (IaC) powered by AWS CDK.
@@ -198,7 +209,7 @@ multilingual-indic-voicebot/
     ├── infra_stack.py          # Provisions AWS resources (VPC, ECS cluster, task definitions, NLB, CloudFront).
     ├── vpc_construct.py        # Configures Custom VPC networks with subnets and ingress/egress controls.
     │
-    └── ec2/                      # Cost-efficient single-EC2 deployment helpers (no CDK).
+    └── ec2/                    # Cost-efficient single-EC2 deployment helpers (no CDK).
         ├── deploy.sh           # One-shot provisioning: Node.js, build, systemd service, .env setup.
         └── voicebot.service    # systemd unit running the backend on boot with auto-restart.
 ```
@@ -225,7 +236,7 @@ Create a `.env` file in **both** the project's root folder and the `backend/` fo
 | `LLM_MODEL` | Main conversational model for dialogue. | `apac.amazon.nova-pro-v1:0`| No |
 | `SARVAM_API_KEY` | Subscription API key from Sarvam Dashboard. | `sk_your_key_here` | **Yes** |
 | `SARVAM_STT_MODEL` | Transcription model identifier. | `saaras:v3` | No |
-| `SARVAM_TTS_MODEL` | Speech synthesis model identifier. | `bulbul:v3` | No |
+| `SARVAM_TTS_MODEL` | Speech synthesis model identifier. | `bulbul:v2` | No |
 | `PORT` | Local server execution port. | `3000` | No |
 | `HOST` | Network binding host address. | `0.0.0.0` | No |
 | `ALLOWED_ORIGINS` | Allowed CORS request domains. | `*` | No |
@@ -316,6 +327,8 @@ sudo SOURCE_DIR=/home/ubuntu bash deploy.sh
 ```
 The script installs Node.js 22, builds the TypeScript, installs a `systemd` service (`voicebot.service`), and auto-starts it on boot.
 
+**Automated CI/CD:** Pushing to the `main` branch triggers the GitHub Actions workflow (`.github/workflows/deploy.yml`), which rsyncs `backend/` to the server, runs the build script, restarts the service, and verifies the `/health` endpoint automatically — no manual deploy needed.
+
 ### 4. Expose Over HTTPS with Cloudflare Tunnel
 Browsers require a secure context for microphone access, so HTTPS is mandatory:
 1. Add your domain to Cloudflare (free plan) and point its nameservers at Cloudflare.
@@ -331,13 +344,18 @@ Browsers require a secure context for microphone access, so HTTPS is mandatory:
 ## Maintenance & Operations
 
 ### How to Update the Sarvam API Key
-If your Sarvam API Key expires and you need to deploy a new one:
-1. Update the `SARVAM_API_KEY` value in your root `.env` file.
-2. Open your terminal in the `infra/` folder, activate the virtual environment, and run:
+If your Sarvam API Key expires and you need to deploy a new one (EC2 deployment):
+1. Update the `SARVAM_API_KEY` value in your `backend/.env` file on the server.
+2. Restart the service:
    ```bash
-   npx cdk deploy --require-approval never --profile <your-aws-profile>
+   ssh ubuntu@<ec2-ip>
+   sudo systemctl restart voicebot
    ```
-ECS Fargate will trigger a zero-downtime rolling deployment, spinning up a new task with the updated key, verifying its health on `/health`, and terminating the old task.
+The `.env` file is gitignored and explicitly excluded from the CI/CD rsync, so secrets are never overwritten by deployments.
+
+### How to Add a New Persona Preset
+1. Create `backend/public/prompts/<name>.md` with the persona instructions.
+2. Push to `main` — CI/CD deploys it; it automatically appears in the UI prompt dropdown.
 
 ---
 
@@ -345,15 +363,15 @@ ECS Fargate will trigger a zero-downtime rolling deployment, spinning up a new t
 
 ### Q1: Voice processing fails or cuts off immediately with a "402 Payment Required" error.
 * **Cause:** Your Sarvam API subscription has run out of credits, or the API key is invalid/expired.
-* **Solution:** Create or fund your key on the [Sarvam AI Dashboard](https://dashboard.sarvam.ai), update the `SARVAM_API_KEY` in your root `.env`, and redeploy using `npx cdk deploy`.
+* **Solution:** Create or fund your key on the [Sarvam AI Dashboard](https://dashboard.sarvam.ai), update the `SARVAM_API_KEY` in `backend/.env` on the server, and restart the service (`sudo systemctl restart voicebot`).
 
 ### Q2: The client browser console prints continuous WebSocket connection retries.
-* **Cause:** The Network Load Balancer (NLB) target groups are listing the ECS containers as `Unhealthy`, or the CloudFront edge proxy is not forwarding raw Socket.io headers.
-* **Solution:** Check your container health in the ECS Console. Verify that the task starts and binds to port `3000` correctly. Ensure the NLB target group path is set to `/health`.
+* **Cause:** The backend service is down/restarting on the server, or the Cloudflare Tunnel is not routing `/socket.io/*` to port `3000`.
+* **Solution:** Check the service status (`sudo systemctl status voicebot`) and the tunnel (`sudo systemctl status cloudflared`). Verify `https://voicebot.yourdomain.com/health` returns `{"status":"ok",...}`.
 
 ### Q3: The bot replies but fails to fetch product catalogue pricing or pump details.
-* **Cause:** The Bedrock Knowledge Base vector store is out-of-sync with the S3 data bucket, or permissions on the Task Role are insufficient.
-* **Solution:** Log in to the AWS console, navigate to **Amazon Bedrock -> Knowledge Bases -> [Your KB ID]**, and click **Sync** to re-index the catalog file. Verify `infra_stack.py` grants permissions for `bedrock: Retrieve` and `bedrock: RetrieveAndGenerate`.
+* **Cause:** The Bedrock Knowledge Base vector store is out-of-sync with the S3 data bucket, or the EC2 IAM role permissions are insufficient.
+* **Solution:** Log in to the AWS console, navigate to **Amazon Bedrock -> Knowledge Bases -> [Your KB ID]**, and click **Sync** to re-index the catalog file. Verify the EC2 instance role grants `bedrock: Retrieve`, `bedrock: RetrieveAndGenerate`, and `bedrock: InvokeModel`.
 
 ---
 

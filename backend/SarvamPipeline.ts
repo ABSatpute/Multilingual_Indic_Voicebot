@@ -481,10 +481,29 @@ export class UnifiedPipeline {
     private async llm(text: string, turnId: number): Promise<string> {
         this.history.push({ role: 'user', content: [{ text }] });
         
-        // Keep history bounded: retain at most the last 20 messages (avoid context overflow / cost growth)
-        const MAX_HISTORY = 20;
-        if (this.history.length > MAX_HISTORY) {
-            this.history = this.history.slice(this.history.length - MAX_HISTORY);
+        // Token-bounded memory management: cap estimated history size (rough ~4 chars/token).
+        // Keeps the last MAX_HISTORY_TOKENS of conversation to bound cost per call.
+        const MAX_HISTORY_TOKENS = 8000;
+        let histTokens = 0;
+        for (let i = this.history.length - 1; i >= 0; i--) {
+            const msg = this.history[i];
+            let size = 0;
+            const content: any = msg.content;
+            if (Array.isArray(content)) {
+                for (const block of content) {
+                    if (block?.text) size += block.text.length;
+                    else if (block?.toolResult?.content) {
+                        for (const c of block.toolResult.content) if (c?.text) size += c.text.length;
+                    }
+                }
+            } else if (typeof content === 'string') {
+                size += content.length;
+            }
+            histTokens += size / 4;
+            if (histTokens > MAX_HISTORY_TOKENS) {
+                this.history = this.history.slice(i);
+                break;
+            }
         }
         
         let prompt = getProcessedSystemPrompt(this.systemPrompt, this.voiceId);
@@ -534,7 +553,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
         ] : [];
         
         let loopCount = 0;
-        const maxLoops = 5;
+        const maxLoops = 2; // user turn + at most one tool-use round-trip
         
         while (loopCount < maxLoops) {
             if (this.turnCounter !== turnId || !this.isActive) return '';
@@ -599,6 +618,10 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                             }));
                             if (this.turnCounter !== turnId || !this.isActive) return '';
                             resultText = kb.output?.text || 'No results found.';
+                            // Cap KB context to bound tokens pushed into history
+                            if (resultText.length > 2000) {
+                                resultText = resultText.slice(0, 2000);
+                            }
                         } catch (e) {
                             console.error('[Pipeline] Native KB error:', e);
                             resultText = 'Error calling Knowledge Base: ' + String(e);
