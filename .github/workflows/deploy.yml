@@ -1,0 +1,42 @@
+name: Deploy to EC2
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy backend to EC2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VOICEBOT_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ vars.VOICEBOT_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Sync backend to server
+        run: |
+          rsync -avz --delete \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
+            --exclude node_modules \
+            --exclude dist \
+            --exclude .env \
+            ./backend/ ubuntu@${{ vars.VOICEBOT_HOST }}:/opt/voicebot/backend/
+
+      - name: Build and restart service
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ubuntu@${{ vars.VOICEBOT_HOST }} \
+            'bash /usr/local/bin/voicebot-build.sh'
+
+      - name: Verify health endpoint
+        run: |
+          sleep 3
+          curl -sf https://voicebot.indicvoicebot.online/health || \
+            curl -sf http://${{ vars.VOICEBOT_HOST }}:3000/health
