@@ -64,40 +64,33 @@ This conversational AI voicebot solves these challenges by combining low-latency
                        [ Internet User ]
                                │
                                ▼ (HTTPS / Port 443)
-                     ┌───────────────────┐
-                     │  Amazon CloudFront│ (Terminates SSL)
-                     └─────────┬─────────┘
-                               │ (HTTP / Port 80)
-                               ▼
-                     ┌───────────────────┐
-                     │    Network Load   │
-                     │   Balancer (NLB)  │
-                     └─────────┬─────────┘
-                               │ (TCP / Port 3000)
-                               ▼
-        ┌─────────────────────────────────────────────────┐
-        │                 AWS VPC (ap-south-1)            │
-        │  ┌───────────────────────────────────────────┐  │
-        │  │            Private Subnet                 │  │
-        │  │   ┌───────────────────────────────────┐   │  │
-        │  │   │        ECS Fargate Task           │   │  │
-        │  │   │      (Node.js App Container)      │   │  │
-        │  │   └───────────────┬───────────────────┘   │  │
-        │  └───────────────────┼───────────────────────┘  │
-        └──────────────────────┼──────────────────────────┘
+                     ┌──────────────────────┐
+                     │  Cloudflare Tunnel   │ (TLS, no inbound ports open)
+                     └──────────┬───────────┘
+                                │ (Cloudflared ↔ origin)
+                                ▼
+         ┌────────────────────────────────────────────┐
+         │              AWS EC2 (ap-south-1)          │
+         │  ┌──────────────────────────────────────┐  │
+         │  │  voicebot.service (systemd)          │  │
+         │  │  Node.js (Express + Socket.io) :3000 │  │
+         │  └──────────────────┬───────────────────┘  │
+         └─────────────────────┼──────────────────────┘
                                │ (IAM Role - bedrock:InvokeModel)
                                ▼
                      [ Amazon Bedrock & KB ]
 ```
 
+The diagram above shows the request flow at runtime. The live system is deployed on a **single EC2 instance** behind a **Cloudflare Tunnel** — a deliberately cost-efficient setup for this project.
+
 ### Why This Infrastructure for AI Applications?
 
 Designing low-latency voice AI assistants requires solving distinct networking and security challenges:
 
-* **VPC & Private Subnets (IP & Data Security):** Because the backend container interacts with Bedrock models, contains API subscription keys, and runs RAG queries against the product catalog, it is isolated in a private subnet. The container has no public IP address, preventing direct scanner attacks and keeping customer queries and vector data secure.
-* **Network Load Balancer (Layer 4 Routing):** Bidirectional real-time voice streaming relies on persistent WebSocket connections. Traditional Application Load Balancers (ALBs) operating at Layer 7 evaluate headers and add network routing latency. The NLB operates at Layer 4 (TCP level) to route audio packet buffers directly to the container instances with sub-millisecond routing overhead, ensuring no audio jitter or cutoff.
-* **Amazon CloudFront (Edge Processing & SSL Offloading):** Offloads SSL/TLS decryption from the application container to the AWS edge. CloudFront handles HTTPS handshakes and dynamically maps both static elements and `/socket.io/*` WebSocket routes to the NLB, protecting the backend with built-in AWS Shield DDoS mitigation.
-* **ECS Fargate (Dedicated Serverless Compute):** Real-time audio pipelines (handling concurrent STT, LLM streaming, and TTS synthesis) are CPU-bound. Fargate guarantees isolated vCPU and RAM parameters, preventing CPU starvation from distorting synthetic speech during voice generations.
+* **Single EC2 + systemd (Simplified, Cost-Effective Compute):** Real-time audio pipelines (handling concurrent STT, LLM streaming, and TTS synthesis) are CPU-bound. A dedicated EC2 instance with systemd-managed `voicebot.service` provides predictable vCPU/RAM without the overhead or cost of a container orchestrator. See [Cost-Efficient Deployment](#cost-efficient-deployment-single-ec2--cloudflare-tunnel).
+* **Cloudflare Tunnel (Zero-Exposure Public Access):** Instead of exposing the instance's public IP or opening security-group ports, a Cloudflare Tunnel (`cloudflared`) creates an outbound-only, TLS-encrypted connection to the Cloudflare edge. HTTPS is terminated at Cloudflare, and the origin has **no public inbound ports**, which prevents direct scanner attacks and keeps the customer-facing traffic secure.
+* **IAM Role for Bedrock (Least-Privilege Access):** The backend uses an EC2 instance role (`voicebot-ec2-role`) scoped to `bedrock:InvokeModel` to call Bedrock models and run RAG queries against the product catalog. No long-lived credentials are stored on the instance for AWS access; only the Sarvam API key lives in `/opt/voicebot/backend/.env`.
+* **CI/CD with GitHub Actions:** Pushing to `main` triggers a workflow that rsyncs `backend/` to the server, runs a build script, restarts the systemd service, and verifies the `/health` endpoint — so the deployed code always matches the repository.
 
 ---
 
@@ -110,9 +103,9 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 | **Speech APIs** | **Sarvam AI** (`saaras:v3` for STT, `bulbul:v2` for TTS) |
 | **LLM & RAG** | Amazon Bedrock (`nova-pro-v1:0` for LLM, `nova-micro-v1:0` for Knowledge Base queries) |
 | **Client Frontend** | Vanilla HTML5 Canvas (Waveform rendering) + Web Audio API (PCM streaming) |
-| **Infrastructure (IaC)** | AWS CDK (Python) |
-| **Compute** | AWS ECS Fargate |
-| **Networking** | AWS VPC, Network Load Balancer (NLB), Amazon CloudFront |
+| **Infrastructure (IaC)** | AWS CDK (Python) for full stack; single-EC2 helpers for cost-efficient deployment |
+| **Compute** | Single EC2 instance (systemd `voicebot.service`) |
+| **Networking** | Cloudflare Tunnel (HTTPS, no inbound ports), Elastic IP |
 
 ---
 
