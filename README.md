@@ -38,10 +38,12 @@ The application leverages Amazon Bedrock for conversational dialogue generation,
     - [1. Configure the CDK Virtual Environment](#1-configure-the-cdk-virtual-environment)
     - [2. Deploy Using AWS CDK](#2-deploy-using-aws-cdk)
     - [3. Tear Down (Stop AWS Charges)](#3-tear-down-stop-aws-charges)
-11. [Maintenance & Operations](#maintenance--operations)
+11. [Cost-Efficient Deployment (Single EC2 + Cloudflare Tunnel)](#cost-efficient-deployment-single-ec2--cloudflare-tunnel)
+12. [Maintenance & Operations](#maintenance--operations)
     - [How to Update the Sarvam API Key](#how-to-update-the-sarvam-api-key)
-12. [Troubleshooting FAQ](#troubleshooting-faq)
-13. [License](#license)
+    - [How to Add a New Persona Preset](#how-to-add-a-new-persona-preset)
+13. [Troubleshooting FAQ](#troubleshooting-faq)
+14. [License](#license)
 
 ---
 
@@ -101,7 +103,7 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 | **Programming Languages** | TypeScript (Backend / Node.js v22), ES6 JavaScript (Client), Python (AWS CDK) |
 | **Backend Framework** | Express + Socket.io (Low-latency WebSockets) |
 | **Speech APIs** | **Sarvam AI** (`saaras:v3` for STT, `bulbul:v2` for TTS) |
-| **LLM & RAG** | Amazon Bedrock (`nova-pro-v1:0` for LLM, `nova-micro-v1:0` for Knowledge Base queries) |
+| **LLM & RAG** | Amazon Bedrock (`apac.amazon.nova-pro-v1:0` for LLM, `apac.amazon.nova-micro-v1:0` for Knowledge Base queries) |
 | **Client Frontend** | Vanilla HTML5 Canvas (Waveform rendering) + Web Audio API (PCM streaming) |
 | **Infrastructure (IaC)** | AWS CDK (Python) for full stack; single-EC2 helpers for cost-efficient deployment |
 | **Compute** | Single EC2 instance (systemd `voicebot.service`) |
@@ -134,7 +136,7 @@ The conversational flow operates sequentially through several distinct AI models
 
 3. **Knowledge Retrieval (Retrieval-Augmented Generation / RAG):**
    * **Model:** Amazon Bedrock Agent Runtime (`RetrieveAndGenerate` command running `apac.amazon.nova-micro-v1:0` against the vector index)
-   * **Process:** When Bedrock identifies technical product specs queries, it triggers a `search_knowledge_base` tool call. The backend halts text generation, runs a semantic cosine similarity query over catalog files in S3, and resubmits the context chunks back to Bedrock to synthesize a factual response.
+   * **Process:** When Bedrock identifies a technical product-specs query, it triggers a `search_knowledge_base` tool call. The backend halts text generation, runs a `RetrieveAndGenerate` query against the product catalog in the Bedrock Knowledge Base (capped at 2000 chars), returns the results to the LLM as tool output, and the LLM synthesizes a factual spoken answer.
 
 4. **Speech Synthesis (Text-to-Speech / TTS):**
    * **Model:** Sarvam AI `bulbul:v2`
@@ -157,6 +159,8 @@ Below is the complete file layout of the repository, explaining the role of each
 multilingual-indic-voicebot/
 ├── .env.example                # Template for configuring AWS credentials, Bedrock IDs, and Sarvam API key.
 ├── .gitignore                  # Git exclusion rules for node_modules, .venv, CDK output directories, and local secrets.
+├── .pre-commit-config.yaml     # Pre-commit hooks (detect-secrets, whitespace, YAML/JSON validation).
+├── CHANGELOG.md                # Versioned changelog of project changes.
 ├── README.md                   # Main documentation guide (setup, configuration, operations, and technical stack).
 │
 ├── .github/
@@ -166,6 +170,7 @@ multilingual-indic-voicebot/
 ├── backend/                    # TypeScript backend server and static frontend assets.
 │   ├── Dockerfile              # Multi-stage Docker build config optimizing container size for production.
 │   ├── .dockerignore           # Specifies folders/files to exclude from ECR container builds.
+│   ├── .env.example            # Backend-local environment variable template.
 │   ├── package.json            # Node.js project manifest listing dependency libraries and build/start scripts.
 │   ├── tsconfig.json           # Compiler options mapping TypeScript code to target JavaScript standard.
 │   ├── server.ts               # Core web server (Express); initializes Socket.io WebSockets and serves public assets.
@@ -174,6 +179,9 @@ multilingual-indic-voicebot/
 │   ├── public/                 # Static web client served by the Express server.
 │   │   ├── index.html          # Main HTML structure, layout elements, and visual containers for the voicebot UI.
 │   │   ├── nova-icon.png       # Branding/favicon asset for the web interface.
+│   │   ├── favicon.ico         # Browser favicon.
+│   │   ├── icon-16/32/48.png   # Small favicon sizes (16, 32, 48 px).
+│   │   ├── icon-180/192/512.png # PWA/application icon sizes (180, 192, 512 px).
 │   │   │
 │   │   ├── prompts/            # Persona prompt templates selectable from the UI.
 │   │   │   ├── default.md      # Default RAG sales-agent persona (personality, parameters, boundaries).
@@ -193,11 +201,14 @@ multilingual-indic-voicebot/
 │   │       └── lib/            # Internal modules handling audio capture, processing, playback, and timing utilities.
 │   │
 │   └── types/                  # Internal TypeScript custom interface definitions.
+│       └── events.ts           # Shared WebSocket event payload type definitions.
 │
 ├── docs/                       # Project blueprints and deployment artifacts.
 │   ├── A1-environment-setup.md # Environment setup guide.
 │   ├── A2-aws-account-setup.md # AWS account preparation guide.
-│   └── PROJECT_DOCUMENTATION.md # Comprehensive engineering reference detailing architecture, VAD formulas, and data flows.
+│   ├── PROJECT_DOCUMENTATION.md # Comprehensive engineering reference detailing architecture, VAD formulas, and data flows.
+│   ├── agent-workflow.drawio   # Editable source of the architecture/workflow diagram (draw.io).
+│   └── Architecture_Diagram.drawio.png # Exported diagram rendered in the README intro.
 │
 └── infra/                      # Infrastructure as Code (IaC) powered by AWS CDK.
     ├── app.py                  # CDK application entry point; loads root .env and instantiates the deployment stack.
@@ -217,7 +228,7 @@ multilingual-indic-voicebot/
 
 ### Prerequisites
 * **Runtime Environments:** Node.js (v22+), Python (3.12+).
-* **Developer Tools:** Docker Desktop (or engine), AWS CLI v2 (configured with Administrator credentials).
+* **Developer Tools:** AWS CLI v2 (configured with Administrator credentials) — needed only for the optional CDK deployment path; Docker Desktop is only required if using the containerized ECR/CDK route.
 * **External APIs:** Active **Sarvam AI** Subscription Key (created at dashboard.sarvam.ai).
 
 ### 1. Set Up Environment Variables
@@ -368,7 +379,7 @@ The `.env` file is gitignored and explicitly excluded from the CI/CD rsync, so s
 
 ### Q3: The bot replies but fails to fetch product catalogue pricing or pump details.
 * **Cause:** The Bedrock Knowledge Base vector store is out-of-sync with the S3 data bucket, or the EC2 IAM role permissions are insufficient.
-* **Solution:** Log in to the AWS console, navigate to **Amazon Bedrock -> Knowledge Bases -> [Your KB ID]**, and click **Sync** to re-index the catalog file. Verify the EC2 instance role grants `bedrock: Retrieve`, `bedrock: RetrieveAndGenerate`, and `bedrock: InvokeModel`.
+* **Solution:** Log in to the AWS console, navigate to **Amazon Bedrock -> Knowledge Bases -> [Your KB ID]**, and click **Sync** to re-index the catalog file. Verify the EC2 instance role grants `bedrock:Retrieve`, `bedrock:RetrieveAndGenerate`, and `bedrock:InvokeModel`.
 
 ---
 
