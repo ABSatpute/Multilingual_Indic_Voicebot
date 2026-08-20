@@ -15,6 +15,10 @@ Instead of being locked into a single persona, the assistant dynamically adapts 
 
 The application leverages Amazon Bedrock for conversational dialogue generation, Bedrock Knowledge Base for RAG (Retrieval-Augmented Generation) product queries, and Sarvam AI for Speech-to-Text (STT) and Text-to-Speech (TTS) pipelines.
 
+### Architecture Overview
+
+![Architecture Diagram](docs/Architecture_Diagram.drawio.png)
+
 ---
 
 ## Table of Contents
