@@ -799,6 +799,10 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                 top_p: this.topP,
                 max_tokens: this.maxTokens
             };
+            // Reasoning models (e.g. Groq gpt-oss): minimize thinking time for voice latency
+            if (model.includes('gpt-oss')) {
+                body.reasoning_effort = 'low';
+            }
             if (tools) body.tools = tools;
 
             const controller = new AbortController();
