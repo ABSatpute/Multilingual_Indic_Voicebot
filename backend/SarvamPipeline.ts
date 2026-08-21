@@ -242,6 +242,8 @@ export class UnifiedPipeline {
     private detectedLang = 'hi-IN';
     private turnCounter = 0;
     private textOnly = false;
+    private oaSummaryText = '';
+    private oaSummarizedCount = 0;
 
     constructor(
         private socket: Socket,
@@ -501,6 +503,7 @@ export class UnifiedPipeline {
             }
             histTokens += size / 4;
             if (histTokens > MAX_HISTORY_TOKENS) {
+                this.oaSummarizedCount = Math.max(0, this.oaSummarizedCount - i);
                 this.history = this.history.slice(i);
                 break;
             }
@@ -741,6 +744,50 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             .trim();
     }
 
+    private historyEntryText(msg: any): string {
+        const content: any = msg?.content;
+        let txt = '';
+        if (Array.isArray(content)) {
+            for (const block of content) {
+                if (block?.text) {
+                    txt += block.text;
+                } else if (block?.toolResult?.content) {
+                    for (const c of block.toolResult.content) {
+                        if (c?.text) txt += c.text;
+                    }
+                }
+            }
+        } else if (typeof content === 'string') {
+            txt += content;
+        }
+        return txt;
+    }
+
+    private async summarizeExchange(previousSummary: string, newExchanges: string): Promise<string> {
+        const apiKey = process.env.OPENAI_API_KEY || '';
+        const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+        const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+        const sys = 'You maintain a concise running summary of a voice sales conversation. Preserve: the user\'s language, product names and models, quantities and specs (HP, bore size, stage), prices, availability, and any commitments made. Reply with ONLY the updated summary text, maximum 120 words.';
+        const userMsg = (previousSummary ? `Previous summary:\n${previousSummary}\n\nNew exchanges to merge:\n` : 'Conversation so far:\n') + newExchanges;
+        const body: any = { model, messages: [{ role: 'system', content: sys }, { role: 'user', content: userMsg }], max_tokens: 300, temperature: 0.2 };
+        if (model.includes('gpt-oss')) body.reasoning_effort = 'low';
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        try {
+            const r = await (globalThis as any).fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+                body: JSON.stringify(body),
+                signal: controller.signal
+            });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            const j = await r.json();
+            return String(j?.choices?.[0]?.message?.content || '').trim();
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
     private fallbackApology(): string {
         const apologies: Record<string, string> = {
             'hi-IN': 'क्षमा करें, सिस्टम व्यस्त है। कृपया थोड़ी देर में फिर से बताइए।',
@@ -768,42 +815,52 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
         const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
         const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
-        const messages: any[] = [{ role: 'system', content: systemPromptText }];
-        for (const msg of this.history) {
-            const content: any = msg.content;
-            let msgText = '';
-            if (Array.isArray(content)) {
-                for (const block of content) {
-                    if (block?.text) {
-                        msgText += block.text;
-                    } else if (block?.toolResult?.content) {
-                        for (const c of block.toolResult.content) {
-                            if (c?.text) msgText += c.text;
-                        }
-                    }
-                }
-            } else if (typeof content === 'string') {
-                msgText += content;
+        // Rolling-summary memory: older turns are compressed into a running summary via the
+        // fallback LLM instead of being dropped, so no context (products, quantities, prices) is lost.
+        const MAX_REQUEST_CHARS = 11000; // ~2.7K tokens including system prompt
+        let keepFrom = Math.max(0, this.history.length - 1); // always keep the latest turn verbatim
+        let totalChars = systemPromptText.length + this.historyEntryText(this.history[this.history.length - 1] || {}).length;
+        for (let i = this.history.length - 2; i >= 0; i--) {
+            const len = this.historyEntryText(this.history[i]).length;
+            if (totalChars + len > MAX_REQUEST_CHARS) break;
+            totalChars += len;
+            keepFrom = i;
+        }
+        if (keepFrom > this.oaSummarizedCount && keepFrom > 0) {
+            const newExchanges: string[] = [];
+            for (let i = this.oaSummarizedCount; i < keepFrom; i++) {
+                const role = this.history[i].role === 'assistant' ? 'Assistant' : 'User';
+                const t = this.historyEntryText(this.history[i]).trim();
+                if (t) newExchanges.push(`${role}: ${t}`);
             }
-            if (msgText.trim()) {
-                messages.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msgText });
+            if (newExchanges.length) {
+                try {
+                    const merged = await this.summarizeExchange(this.oaSummaryText, newExchanges.join('\n'));
+                    if (merged) {
+                        this.oaSummaryText = merged;
+                        this.oaSummarizedCount = keepFrom;
+                        console.log('[Pipeline] Fallback memory summarized up to history entry', keepFrom);
+                    }
+                } catch (e: any) {
+                    console.error('[Pipeline] Summarization failed, continuing with existing summary:', e?.message || e);
+                }
+            } else {
+                this.oaSummarizedCount = keepFrom;
             }
         }
 
-        // Bound request size: rate-limited providers (e.g. Groq free tier TPM) reject large prompts
-        const MAX_REQUEST_CHARS = 11000; // ~2.7K tokens including system prompt
-        let totalChars = systemPromptText.length;
-        for (let i = 1; i < messages.length; i++) {
-            totalChars += String(messages[i].content || '').length;
-        }
-        let firstKept = 1;
-        while (firstKept < messages.length && totalChars > MAX_REQUEST_CHARS) {
-            totalChars -= String(messages[firstKept].content || '').length;
-            firstKept++;
-        }
-        if (firstKept > 1) {
-            console.log(`[Pipeline] Trimming ${firstKept - 1} old messages to fit fallback token budget`);
-            messages.splice(1, firstKept - 1);
+        const messages: any[] = [{
+            role: 'system',
+            content: this.oaSummaryText
+                ? systemPromptText + '\n\nSummary of the earlier conversation (context, not verbatim):\n' + this.oaSummaryText
+                : systemPromptText
+        }];
+        for (let i = keepFrom; i < this.history.length; i++) {
+            const msg = this.history[i];
+            const msgText = this.historyEntryText(msg);
+            if (msgText.trim()) {
+                messages.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msgText });
+            }
         }
 
         const tools = this.enabledTools.includes('search_knowledge_base') ? [
