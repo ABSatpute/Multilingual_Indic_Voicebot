@@ -2,9 +2,11 @@
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
 import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } from '@aws-sdk/client-bedrock-agent-runtime';
 import { Socket } from 'socket.io';
-import { v4 as uuidv4 } from 'uuid';
 
-
+const KB_RESULT_MAX_CHARS = 2000;
+const MEMORY_QUERY_LIMIT = 3;
+const LLM_TIMEOUT_MS = 30000;
+const TTS_CHUNK_SIZE = 150;
 
 function getLanguageName(code: string): string {
     const codes: Record<string, string> = {
@@ -130,7 +132,7 @@ const VOICE_NAMES: Record<string, Record<string, string>> = {
         'kannada': 'ಕಾವ್ಯಾ', 'bengali': 'কাব্যা', 'malayalam': 'കാവ്യ', 'marathi': 'काव्या',
         'gujarati': 'કાવ્યા', 'punjabi': 'ਕਾਵਿਆ', 'odia': 'କାବ୍ୟା', 'assamese': 'কাব্যা'
     },
-'anand': {
+    'anand': {
         'hindi': 'आनंद', 'english': 'Anand', 'tamil': 'ஆனந்த்', 'telugu': 'ఆనంద్',
         'kannada': 'ಆನಂದ್', 'bengali': 'আনন্দ', 'malayalam': 'ആനന്ദ്', 'marathi': 'आनंद',
         'gujarati': 'આનંદ', 'punjabi': 'ਆਨੰਦ', 'odia': 'ଆନନ୍ଦ', 'assamese': 'আনন্দ'
@@ -147,7 +149,7 @@ const VOICE_NAMES: Record<string, Record<string, string>> = {
     }
 };
 
-export function getProcessedSystemPrompt(originalPrompt: string, voiceId: string): string {
+function getProcessedSystemPrompt(originalPrompt: string, voiceId: string): string {
     if (!originalPrompt) return originalPrompt;
     
     const voiceLower = voiceId.toLowerCase();
@@ -654,43 +656,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             
             // If we reached here, it's a normal text output (or final output after tool result)
             const textBlock = outputMessage.content?.find(c => (c as any).text);
-            let reply = textBlock?.text || '';
-            
-            // Strip reasoning/thinking tags
-            reply = reply.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
-            
-            // Extract language code from response prefix
-            const langMatch = reply.trim().match(/^\[([a-zA-Z]{2}-[a-zA-Z]{2})\]\s*(.*)$/s);
-            if (langMatch) {
-                const detectedCode = langMatch[1];
-                reply = langMatch[2];
-                
-                const targetLangName = getLanguageName(detectedCode);
-                const oldCode = this.detectedLang;
-                this.detectedLang = detectedCode;
-                this.language = targetLangName.toLowerCase();
-                
-                if (oldCode.toLowerCase() !== this.detectedLang.toLowerCase()) {
-                    console.log(`[Pipeline] LLM dynamic language switch: ${detectedCode} (${targetLangName})`);
-                    this.socket.emit('languageDetected', { 
-                        languageCode: this.detectedLang, 
-                        languageName: targetLangName 
-                    });
-                }
-            }
-            
-            // Apply standard text stripping regexes just in case
-            reply = reply
-                .replace(/`?search_knowledge_base\(.*?\)`?/gi, '')
-                .replace(/[\*`\s]*(?:tool|knowledge|search|calls|calling)(?: |-|_)?(?:calling|call|output|result|base|knowledge_base|search_knowledge_base)?[\*`\s:-]*/gi, '')
-                .replace(/\((?:[^)]*?(?:मानले|समझा|assuming|based on|derived from|tool|result|knowledge|base|साधन|निकाल|उत्तर|माहिती|information|टूल|परिणाम|जानकारी|आधार)[^)]*?)\)/gi, '')
-                .replace(/[^.!?]*?(?:let me check|look up|please wait|hold on|give me a moment|thank you for waiting|details I have found|here are the details|information I found|calls search_knowledge_base)[^.!?]*?(?:\.|\!|\?|$)/gi, '')
-                .replace(/[^.!?।]*?(?:खोज रहा|ढूंढ रहा|चेक कर|जानकारी लेता|प्रतीक्षा करें|इंतजार करें|रुकें)[^.!?।]*?(?:\.|\!|\?।|$)/gi, '')
-                .replace(/[^.!?।]*?(?:शोधत आहे|शोध घेत आहे|चेक करतो|माहिती मिळवतो|प्रतीक्षा करा|वेળ थांबा|किंचित प्रतीक्षा|उपलब्धता तपासत|वेळ द्या)[^.!?।]*?(?:\.|\!|\?।|$)/gi, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-                
-            return reply;
+            return this.processReply(textBlock?.text || '');
         }
         
         return '';
@@ -705,8 +671,8 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             }}
         }));
         let resultText = kb.output?.text || 'No results found.';
-        if (resultText.length > 2000) {
-            resultText = resultText.slice(0, 2000);
+        if (resultText.length > KB_RESULT_MAX_CHARS) {
+            resultText = resultText.slice(0, KB_RESULT_MAX_CHARS);
         }
         return resultText;
     }
@@ -765,7 +731,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
 
     private rememberKB(query: string, resultText: string): void {
         this.recentKBQueries.push(query);
-        if (this.recentKBQueries.length > 3) this.recentKBQueries.shift();
+        if (this.recentKBQueries.length > MEMORY_QUERY_LIMIT) this.recentKBQueries.shift();
         if (resultText && resultText !== 'No results found.' && !resultText.startsWith('Error') && !resultText.startsWith('Product catalog is temporarily unavailable.')) {
             this.lastKBResultText = resultText;
         }
@@ -872,7 +838,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             if (tools) body.tools = tools;
 
             const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 30000);
+            const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
             let responseJson: any;
             try {
                 let response: any = null;
@@ -964,7 +930,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
     private async speak(text: string, lang: string, turnId: number): Promise<void> {
         try {
             // Split into smaller chunks (150 chars max) to align text & voice streaming speed
-            const chunks = splitTextIntoChunks(text, 150);
+            const chunks = splitTextIntoChunks(text, TTS_CHUNK_SIZE);
             if (chunks.length === 0) {
                 if (this.turnCounter === turnId) {
                     this.socket.emit('sarvamDone');
