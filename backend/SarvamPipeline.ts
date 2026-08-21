@@ -755,23 +755,6 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
         return apologies[this.detectedLang] || apologies['en-IN'];
     }
 
-    private slimFallbackPrompt(fullPrompt: string): string {
-        const langName = this.language || 'hindi';
-        const voiceLower = (this.voiceId || 'priya').toLowerCase();
-        const isMale = ['anand', 'rahul', 'shubh'].includes(voiceLower);
-        const gender = isMale ? 'male' : 'female';
-        return `You are Priya, a ${gender} sales representative from Precise Engineers, Indore.
-Speak in ${langName}. Be friendly, concise, and helpful.
-Keep replies under 3 sentences for voice conversation.
-When the user asks about products, use the search_knowledge_base tool.
-NEVER mention tools, searches, or databases — just give the answer naturally.
-CRITICAL RESPONSE FORMAT RULES:
-- Reply ONLY in the user's language
-- Keep replies under 3 sentences
-- Use natural spoken language, avoid bullet points or lists
-- Never say "I cannot" or "I don't have access"`;
-    }
-
     private async llmOpenAI(text: string, systemPromptText: string, turnId: number): Promise<string> {
         const apiKey = process.env.OPENAI_API_KEY || '';
         if (!apiKey) {
@@ -812,7 +795,7 @@ CRITICAL RESPONSE FORMAT RULES:
             keepFrom = i;
         }
 
-        const messages: any[] = [{ role: 'system', content: this.slimFallbackPrompt(systemPromptText) + memoryBlock }];
+        const messages: any[] = [{ role: 'system', content: systemPromptText + memoryBlock }];
         for (let i = keepFrom; i < this.history.length; i++) {
             const msg = this.history[i];
             const msgText = this.historyEntryText(msg);
