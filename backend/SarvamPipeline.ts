@@ -741,6 +741,24 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             .trim();
     }
 
+    private fallbackApology(): string {
+        const apologies: Record<string, string> = {
+            'hi-IN': 'क्षमा करें, सिस्टम व्यस्त है। कृपया थोड़ी देर में फिर से बताइए।',
+            'mr-IN': 'क्षमस्व, सिस्टम व्यस्त आहे. कृपया थोड्या वेळाने पुन्हा सांगा.',
+            'en-IN': 'Sorry, the system is busy. Please try again in a moment.',
+            'ta-IN': 'மன்னிக்கவும், அமைப்பு பணிமிகுதியில் உள்ளது. சற்று நேரம் கழித்து மீண்டும் சொல்லுங்கள்.',
+            'te-IN': 'క్షమించండి, సిస్టమ్ బిజీగా ఉంది. కొంచెం తర్వాత మళ్లీ చెప్పండి.',
+            'kn-IN': 'ಕ್ಷಮಿಸಿ, ಸಿಸ್ಟಮ್ ಕಾರ್ಯನಿರತವಾಗಿದೆ. ಸ್ವಲ್ಪ ಹೊತ್ತಿನ ನಂತರ ಮತ್ತೆ ಹೇಳಿ.',
+            'bn-IN': 'দুঃখিত, সিস্টেম ব্যস্ত আছে। একটু পরে আবার বলুন।',
+            'ml-IN': 'ക്ഷമിക്കണം, സിസ്റ്റം തിരക്കിലാണ്. അല്പനേരം കഴിഞ്ഞ് വീണ്ടും പറയൂ.',
+            'gu-IN': 'માફ કરશો, સિસ્ટમ વ્યસ્ત છે. થોડી વાર પછી ફરી કહો.',
+            'pa-IN': 'ਮਾਫ਼ ਕਰਨਾ, ਸਿਸਟਮ ਰੁੱਝਿਆ ਹੋਇਆ ਹੈ। ਥੋੜ੍ਹੀ ਦੇਰ ਬਾਅਦ ਦੁਬਾਰਾ ਦੱਸੋ।',
+            'od-IN': 'କ୍ଷମା କରନ୍ତୁ, ସିଷ୍ଟମ୍ ବ୍ୟସ୍ତ ଅଛି। ଏଟା ପରେ ପୁଣି କୁହନ୍ତୁ।',
+            'as-IN': 'ক্ষমা কৰিব, চিষ্টেম ব্যস্ত হৈ আছে। অলপ পাছত আকৌ কওক।'
+        };
+        return apologies[this.detectedLang] || apologies['en-IN'];
+    }
+
     private async llmOpenAI(text: string, systemPromptText: string, turnId: number): Promise<string> {
         const apiKey = process.env.OPENAI_API_KEY || '';
         if (!apiKey) {
@@ -770,6 +788,22 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             if (msgText.trim()) {
                 messages.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msgText });
             }
+        }
+
+        // Bound request size: rate-limited providers (e.g. Groq free tier TPM) reject large prompts
+        const MAX_REQUEST_CHARS = 11000; // ~2.7K tokens including system prompt
+        let totalChars = systemPromptText.length;
+        for (let i = 1; i < messages.length; i++) {
+            totalChars += String(messages[i].content || '').length;
+        }
+        let firstKept = 1;
+        while (firstKept < messages.length && totalChars > MAX_REQUEST_CHARS) {
+            totalChars -= String(messages[firstKept].content || '').length;
+            firstKept++;
+        }
+        if (firstKept > 1) {
+            console.log(`[Pipeline] Trimming ${firstKept - 1} old messages to fit fallback token budget`);
+            messages.splice(1, firstKept - 1);
         }
 
         const tools = this.enabledTools.includes('search_knowledge_base') ? [
@@ -809,19 +843,32 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             const timer = setTimeout(() => controller.abort(), 30000);
             let responseJson: any;
             try {
-                const response = await (globalThis as any).fetch(`${baseUrl}/chat/completions`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${apiKey}`
-                    },
-                    body: JSON.stringify(body),
-                    signal: controller.signal
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text().catch(() => '');
-                    throw new Error(`OpenAI HTTP ${response.status}: ${errorText.slice(0, 300)}`);
+                let response: any = null;
+                for (let attempt = 0; attempt < 2; attempt++) {
+                    if (this.turnCounter !== turnId || !this.isActive) return '';
+                    response = await (globalThis as any).fetch(`${baseUrl}/chat/completions`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Authorization: `Bearer ${apiKey}`
+                        },
+                        body: JSON.stringify(body),
+                        signal: controller.signal
+                    });
+                    if (response.ok) break;
+                    if (response.status === 429 && attempt === 0) {
+                        const retryAfterSec = parseFloat(response.headers.get('retry-after') || '') || 0;
+                        const waitMs = Math.min(Math.max(retryAfterSec * 1000, 3000), 15000);
+                        console.log(`[Pipeline] Fallback provider rate limited, retrying in ${Math.round(waitMs / 1000)}s`);
+                        await new Promise(r => setTimeout(r, waitMs));
+                        continue;
+                    }
+                    break;
+                }
+                if (!response || !response.ok) {
+                    const errorText = response ? await response.text().catch(() => '') : 'no response';
+                    console.error('[Pipeline] Fallback provider failed:', response?.status, errorText.slice(0, 200));
+                    return this.fallbackApology();
                 }
                 responseJson = await response.json();
             } finally {
