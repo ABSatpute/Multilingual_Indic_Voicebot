@@ -663,18 +663,32 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
     }
 
     private async searchKnowledgeBase(query: string): Promise<string> {
-        const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
-            input: { text: query },
-            retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
-                knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '', modelArn: process.env.KB_MODEL_ARN || '',
-                retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
-            }}
-        }));
-        let resultText = kb.output?.text || 'No results found.';
-        if (resultText.length > KB_RESULT_MAX_CHARS) {
-            resultText = resultText.slice(0, KB_RESULT_MAX_CHARS);
+        for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+                const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
+                    input: { text: query },
+                    retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
+                        knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '', modelArn: process.env.KB_MODEL_ARN || '',
+                        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
+                    }}
+                }));
+                let resultText = kb.output?.text || 'No results found.';
+                if (resultText.length > KB_RESULT_MAX_CHARS) {
+                    resultText = resultText.slice(0, KB_RESULT_MAX_CHARS);
+                }
+                return resultText;
+            } catch (e: any) {
+                const isThrottling = e?.name === 'ThrottlingException' || e?.name === 'TooManyRequestsException' || /rate|throttl/i.test(String(e));
+                if (isThrottling && attempt < 2) {
+                    const waitMs = Math.min(2000 * (attempt + 1), 8000);
+                    console.log(`[Pipeline] KB throttled, retrying in ${waitMs}ms (attempt ${attempt + 1})`);
+                    await new Promise(r => setTimeout(r, waitMs));
+                    continue;
+                }
+                throw e;
+            }
         }
-        return resultText;
+        return 'No results found.';
     }
 
     private processReply(rawReply: string): string {
