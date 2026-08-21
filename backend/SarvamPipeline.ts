@@ -868,14 +868,17 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                     console.error('[Pipeline] Fallback provider failed:', response?.status, errorText.slice(0, 200));
                     return this.fallbackApology();
                 }
-                responseJson = await response.json();
+            responseJson = await response.json();
             } finally {
                 clearTimeout(timer);
             }
 
+            console.log('[Pipeline] OpenAI response keys:', Object.keys(responseJson || {}));
+            console.log('[Pipeline] OpenAI choices[0]:', JSON.stringify(responseJson?.choices?.[0] || {}).slice(0, 500));
+
             const message = responseJson?.choices?.[0]?.message;
             if (!message) {
-                throw new Error('No message output from OpenAI');
+                throw new Error('No message output from OpenAI: ' + JSON.stringify(responseJson).slice(0, 300));
             }
 
             if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
