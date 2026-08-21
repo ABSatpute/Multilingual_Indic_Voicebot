@@ -575,7 +575,14 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             }
             
             if (this.turnCounter !== turnId || !this.isActive) return '';
-            const res = await this.bedrock.send(new ConverseCommand(params));
+            let res: any;
+            try {
+                res = await this.bedrock.send(new ConverseCommand(params));
+            } catch (bedrockErr: any) {
+                if (this.turnCounter !== turnId || !this.isActive) return '';
+                console.error('[Pipeline] Bedrock LLM failed, falling back to OpenAI:', bedrockErr?.name || bedrockErr, bedrockErr?.message || '');
+                return await this.llmOpenAI(text, prompt, turnId);
+            }
             if (this.turnCounter !== turnId || !this.isActive) return '';
             
             const stopReason = res.stopReason;
@@ -609,19 +616,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                         let resultText = 'No results found.';
                         try {
                             if (this.turnCounter !== turnId || !this.isActive) return '';
-                            const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
-                                input: { text: searchQuery },
-                                retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
-                                    knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '', modelArn: process.env.KB_MODEL_ARN || '',
-                                    retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
-                                }}
-                            }));
-                            if (this.turnCounter !== turnId || !this.isActive) return '';
-                            resultText = kb.output?.text || 'No results found.';
-                            // Cap KB context to bound tokens pushed into history
-                            if (resultText.length > 2000) {
-                                resultText = resultText.slice(0, 2000);
-                            }
+                            resultText = await this.searchKnowledgeBase(searchQuery);
                         } catch (e) {
                             console.error('[Pipeline] Native KB error:', e);
                             resultText = 'Error calling Knowledge Base: ' + String(e);
@@ -695,6 +690,190 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             return reply;
         }
         
+        return '';
+    }
+
+    private async searchKnowledgeBase(query: string): Promise<string> {
+        const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
+            input: { text: query },
+            retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
+                knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '', modelArn: process.env.KB_MODEL_ARN || '',
+                retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
+            }}
+        }));
+        let resultText = kb.output?.text || 'No results found.';
+        if (resultText.length > 2000) {
+            resultText = resultText.slice(0, 2000);
+        }
+        return resultText;
+    }
+
+    private processReply(rawReply: string): string {
+        let reply = rawReply.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+
+        const langMatch = reply.trim().match(/^\[([a-zA-Z]{2}-[a-zA-Z]{2})\]\s*(.*)$/s);
+        if (langMatch) {
+            const detectedCode = langMatch[1];
+            reply = langMatch[2];
+
+            const targetLangName = getLanguageName(detectedCode);
+            const oldCode = this.detectedLang;
+            this.detectedLang = detectedCode;
+            this.language = targetLangName.toLowerCase();
+
+            if (oldCode.toLowerCase() !== this.detectedLang.toLowerCase()) {
+                console.log(`[Pipeline] LLM dynamic language switch: ${detectedCode} (${targetLangName})`);
+                this.socket.emit('languageDetected', {
+                    languageCode: this.detectedLang,
+                    languageName: targetLangName
+                });
+            }
+        }
+
+        return reply
+            .replace(/`?search_knowledge_base\(.*?\)`?/gi, '')
+            .replace(/[\*`\s]*(?:tool|knowledge|search|calls|calling)(?: |-|_)?(?:calling|call|output|result|base|knowledge_base|search_knowledge_base)?[\*`\s:-]*/gi, '')
+            .replace(/\((?:[^)]*?(?:मानले|समझा|assuming|based on|derived from|tool|result|knowledge|base|साधन|निकाल|उत्तर|माहिती|information|टूल|परिणाम|जानकारी|आधार)[^)]*?)\)/gi, '')
+            .replace(/[^.!?]*?(?:let me check|look up|please wait|hold on|give me a moment|thank you for waiting|details I have found|here are the details|information I found|calls search_knowledge_base)[^.!?]*?(?:\.|\!|\?|$)/gi, '')
+            .replace(/[^.!?।]*?(?:खोज रहा|ढूंढ रहा|चेक कर|जानकारी लेता|प्रतीक्षा करें|इंतजार करें|रुकें)[^.!?।]*?(?:\.|\!|\?।|$)/gi, '')
+            .replace(/[^.!?।]*?(?:शोधत आहे|शोध घेत आहे|चेक करतो|माहिती मिळवतो|प्रतीक्षा करा|वेળ थांबा|किंचित प्रतीक्षा|उपलब्धता तपासत|वेळ द्या)[^.!?।]*?(?:\.|\!|\?।|$)/gi, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    private async llmOpenAI(text: string, systemPromptText: string, turnId: number): Promise<string> {
+        const apiKey = process.env.OPENAI_API_KEY || '';
+        if (!apiKey) {
+            throw new Error('Bedrock failed and OPENAI_API_KEY is not configured for fallback');
+        }
+
+        const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
+        const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
+
+        const messages: any[] = [{ role: 'system', content: systemPromptText }];
+        for (const msg of this.history) {
+            const content: any = msg.content;
+            let msgText = '';
+            if (Array.isArray(content)) {
+                for (const block of content) {
+                    if (block?.text) {
+                        msgText += block.text;
+                    } else if (block?.toolResult?.content) {
+                        for (const c of block.toolResult.content) {
+                            if (c?.text) msgText += c.text;
+                        }
+                    }
+                }
+            } else if (typeof content === 'string') {
+                msgText += content;
+            }
+            if (msgText.trim()) {
+                messages.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msgText });
+            }
+        }
+
+        const tools = this.enabledTools.includes('search_knowledge_base') ? [
+            {
+                type: 'function',
+                function: {
+                    name: 'search_knowledge_base',
+                    description: 'Search product specifications, recommendations, models, pricing, availability, and comparisons.',
+                    parameters: {
+                        type: 'object',
+                        properties: {
+                            query: { type: 'string', description: 'The search query to retrieve product details or recommendations' }
+                        },
+                        required: ['query']
+                    }
+                }
+            }
+        ] : undefined;
+
+        for (let loopCount = 0; loopCount < 2; loopCount++) {
+            if (this.turnCounter !== turnId || !this.isActive) return '';
+
+            const body: any = {
+                model,
+                messages,
+                temperature: this.temperature,
+                top_p: this.topP,
+                max_tokens: this.maxTokens
+            };
+            if (tools) body.tools = tools;
+
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 30000);
+            let responseJson: any;
+            try {
+                const response = await (globalThis as any).fetch(`${baseUrl}/chat/completions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        Authorization: `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => '');
+                    throw new Error(`OpenAI HTTP ${response.status}: ${errorText.slice(0, 300)}`);
+                }
+                responseJson = await response.json();
+            } finally {
+                clearTimeout(timer);
+            }
+
+            const message = responseJson?.choices?.[0]?.message;
+            if (!message) {
+                throw new Error('No message output from OpenAI');
+            }
+
+            if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
+                messages.push({ role: 'assistant', content: message.content || '', tool_calls: message.tool_calls });
+                for (const toolCall of message.tool_calls) {
+                    if (toolCall?.function?.name !== 'search_knowledge_base') continue;
+                    let searchQuery = text;
+                    try {
+                        searchQuery = JSON.parse(toolCall.function.arguments || '{}')?.query || text;
+                    } catch {
+                        searchQuery = text;
+                    }
+
+                    console.log('[Pipeline] OpenAI fallback ToolUse triggered:', toolCall.id, 'for query:', searchQuery);
+                    const startTime = Date.now();
+                    this.socket.emit('toolUse', {
+                        toolUseId: toolCall.id,
+                        toolName: 'search_knowledge_base',
+                        content: JSON.stringify({ query: searchQuery })
+                    });
+
+                    let resultText = 'No results found.';
+                    try {
+                        if (this.turnCounter !== turnId || !this.isActive) return '';
+                        resultText = await this.searchKnowledgeBase(searchQuery);
+                    } catch (e) {
+                        console.error('[Pipeline] OpenAI fallback KB error:', e);
+                        resultText = 'Product catalog is temporarily unavailable.';
+                    }
+
+                    this.socket.emit('toolResult', {
+                        toolUseId: toolCall.id,
+                        result: JSON.stringify({ result: resultText }),
+                        executionTimeMs: Date.now() - startTime
+                    });
+                    messages.push({ role: 'tool', tool_call_id: toolCall.id, content: resultText });
+                }
+                continue;
+            }
+
+            const rawReply = message.content || '';
+            if (rawReply.trim()) {
+                this.history.push({ role: 'assistant', content: [{ text: rawReply }] });
+            }
+            return this.processReply(rawReply);
+        }
+
         return '';
     }
 
