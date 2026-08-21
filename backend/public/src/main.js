@@ -47,26 +47,42 @@ const customSelects = document.querySelectorAll('.custom-select');
 // Toast notification system
 const toastContainer = document.getElementById('toast-container');
 function showToast(type, title, message) {
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    const icons = { error: '\u26A0\uFE0F', warning: '\u26A0\uFE0F', info: '\u2139\uFE0F', success: '\u2705' };
-    toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><div class="toast-body"><div class="toast-title">${title}</div>${message ? `<div class="toast-msg">${message}</div>` : ''}</div><button class="toast-close" aria-label="Close">&times;</button>`;
-    toast.querySelector('.toast-close').addEventListener('click', () => { toast.style.animation = 'none'; toast.remove(); });
-    toastContainer.appendChild(toast);
-    setTimeout(() => { if (toast.parentNode) toast.remove(); }, 7000);
+    try {
+        if (!toastContainer) { console.warn('Toast container not found'); return; }
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        const icons = { error: '\u26A0\uFE0F', warning: '\u26A0\uFE0F', info: '\u2139\uFE0F', success: '\u2705' };
+        toast.innerHTML = `<span class="toast-icon">${icons[type] || icons.info}</span><div class="toast-body"><div class="toast-title">${title}</div>${message ? `<div class="toast-msg">${message}</div>` : ''}</div><button class="toast-close" aria-label="Close">&times;</button>`;
+        toast.querySelector('.toast-close').addEventListener('click', () => { toast.style.animation = 'none'; toast.remove(); });
+        toastContainer.appendChild(toast);
+        setTimeout(() => { if (toast.parentNode) toast.remove(); }, 7000);
+        console.log(`[Toast] ${type}: ${title} - ${message}`);
+    } catch (e) {
+        console.error('showToast failed:', e);
+        alert(`${title}: ${message}`);
+    }
 }
 
 function friendlyServerError(error) {
-    if (!error) return 'Unknown error';
-    const raw = (error.details || error.message || String(error));
-    if (/insufficient_quota|402|No credits/i.test(raw)) return 'Speech service out of credits. Please contact support.';
-    if (/ThrottlingException|429|rate.?limit|too many tokens/i.test(raw)) return 'AI model is rate-limited. Please try again shortly.';
-    if (/Throttling.*day|daily.*quota/i.test(raw)) return 'Daily AI quota exhausted. Please try again tomorrow.';
-    if (/Timeout|timed?\s*out/i.test(raw)) return 'Server timed out. Please try again.';
-    if (/mic|microphone|not-allowed|permission/i.test(raw)) return 'Microphone access denied. Please allow mic permissions.';
-    if (/ENOTFOUND|ECONNREFUSED|network|fetch failed/i.test(raw)) return 'Cannot reach server. Check your connection.';
-    if (/Sarvam|sarvam/i.test(raw)) return 'Speech service error: ' + raw;
-    return raw.length > 120 ? raw.slice(0, 120) + '...' : raw;
+    try {
+        if (!error) return 'Unknown error';
+        let raw;
+        if (typeof error === 'string') raw = error;
+        else if (error.details) raw = String(error.details);
+        else if (error.message) raw = String(error.message);
+        else if (error.error?.message) raw = String(error.error.message);
+        else raw = String(error);
+        if (/insufficient_quota|402|No credits/i.test(raw)) return 'Speech service out of credits. Please contact support.';
+        if (/ThrottlingException|429|rate.?limit|too many tokens/i.test(raw)) return 'AI model is rate-limited. Please try again shortly.';
+        if (/Throttling.*day|daily.*quota/i.test(raw)) return 'Daily AI quota exhausted. Please try again tomorrow.';
+        if (/Timeout|timed?\s*out/i.test(raw)) return 'Server timed out. Please try again.';
+        if (/mic|microphone|not-allowed|permission/i.test(raw)) return 'Microphone access denied. Please allow mic permissions.';
+        if (/ENOTFOUND|ECONNREFUSED|network|fetch failed/i.test(raw)) return 'Cannot reach server. Check your connection.';
+        if (/Sarvam|sarvam/i.test(raw)) return 'Speech service error: ' + raw;
+        return raw.length > 120 ? raw.slice(0, 120) + '...' : raw;
+    } catch (e) {
+        return String(error);
+    }
 }
 
 // Theme
@@ -2536,6 +2552,17 @@ window.showToast = showToast;
 window.friendlyServerError = friendlyServerError;
 Object.defineProperty(window, 'sessionInitialized', {
     get: () => sessionInitialized
+});
+
+// Global error safety net — catches anything that slips past local handlers
+window.addEventListener('error', (e) => {
+    console.error('[Global]', e.message, e.filename, e.lineno);
+    if (showToast) showToast('error', 'Unexpected Error', e.message);
+});
+window.addEventListener('unhandledrejection', (e) => {
+    console.error('[Unhandled rejection]', e.reason);
+    const msg = e.reason?.message || String(e.reason || '');
+    if (msg && showToast) showToast('error', 'Request Failed', friendlyServerError(e.reason));
 });
 
 // Initialize
