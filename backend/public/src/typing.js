@@ -136,6 +136,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         } catch (error) {
             console.error('Error sending message:', error);
             
+            // Show toast notification
+            if (window.showToast) {
+                window.showToast('error', 'Send Failed', window.friendlyServerError ? window.friendlyServerError(error) : error.message);
+            }
+            
             // Show error in chat
             const chatContainer = document.getElementById('chat-container');
             if (chatContainer) {
