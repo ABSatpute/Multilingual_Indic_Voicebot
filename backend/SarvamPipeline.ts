@@ -242,8 +242,8 @@ export class UnifiedPipeline {
     private detectedLang = 'hi-IN';
     private turnCounter = 0;
     private textOnly = false;
-    private oaSummaryText = '';
-    private oaSummarizedCount = 0;
+    private recentKBQueries: string[] = [];
+    private lastKBResultText = '';
 
     constructor(
         private socket: Socket,
@@ -503,7 +503,6 @@ export class UnifiedPipeline {
             }
             histTokens += size / 4;
             if (histTokens > MAX_HISTORY_TOKENS) {
-                this.oaSummarizedCount = Math.max(0, this.oaSummarizedCount - i);
                 this.history = this.history.slice(i);
                 break;
             }
@@ -624,6 +623,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                             console.error('[Pipeline] Native KB error:', e);
                             resultText = 'Error calling Knowledge Base: ' + String(e);
                         }
+                        this.rememberKB(searchQuery, resultText);
                         
                         const duration = Date.now() - startTime;
                         this.socket.emit('toolResult', {
@@ -763,28 +763,11 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
         return txt;
     }
 
-    private async summarizeExchange(previousSummary: string, newExchanges: string): Promise<string> {
-        const apiKey = process.env.OPENAI_API_KEY || '';
-        const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-        const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
-        const sys = 'You maintain a concise running summary of a voice sales conversation. Preserve: the user\'s language, product names and models, quantities and specs (HP, bore size, stage), prices, availability, and any commitments made. Reply with ONLY the updated summary text, maximum 120 words.';
-        const userMsg = (previousSummary ? `Previous summary:\n${previousSummary}\n\nNew exchanges to merge:\n` : 'Conversation so far:\n') + newExchanges;
-        const body: any = { model, messages: [{ role: 'system', content: sys }, { role: 'user', content: userMsg }], max_tokens: 300, temperature: 0.2 };
-        if (model.includes('gpt-oss')) body.reasoning_effort = 'low';
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 20000);
-        try {
-            const r = await (globalThis as any).fetch(`${baseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-                body: JSON.stringify(body),
-                signal: controller.signal
-            });
-            if (!r.ok) throw new Error(`HTTP ${r.status}`);
-            const j = await r.json();
-            return String(j?.choices?.[0]?.message?.content || '').trim();
-        } finally {
-            clearTimeout(timer);
+    private rememberKB(query: string, resultText: string): void {
+        this.recentKBQueries.push(query);
+        if (this.recentKBQueries.length > 3) this.recentKBQueries.shift();
+        if (resultText && resultText !== 'No results found.' && !resultText.startsWith('Error') && !resultText.startsWith('Product catalog is temporarily unavailable.')) {
+            this.lastKBResultText = resultText;
         }
     }
 
@@ -815,46 +798,38 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
         const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
         const baseUrl = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '');
 
-        // Rolling-summary memory: older turns are compressed into a running summary via the
-        // fallback LLM instead of being dropped, so no context (products, quantities, prices) is lost.
-        const MAX_REQUEST_CHARS = 11000; // ~2.7K tokens including system prompt
+        // Deterministic conversation memory (no extra LLM calls, fully traceable):
+        // verified facts captured in code at KB lookup time + recent turns kept verbatim.
+        const memoryLines: string[] = [];
+        if (this.detectedLang) memoryLines.push(`User language: ${this.detectedLang}`);
+        if (this.recentKBQueries.length) {
+            memoryLines.push('Recent product queries from the user:');
+            for (const q of this.recentKBQueries) memoryLines.push(`- ${q}`);
+        }
+        if (this.lastKBResultText) {
+            memoryLines.push('Latest verified catalog information:\n' + this.lastKBResultText);
+        }
+        const memoryBlock = memoryLines.length
+            ? '\n\n[CONVERSATION MEMORY - verified facts from this session]\n' + memoryLines.join('\n')
+            : '';
+        console.log('[Pipeline] Conversation memory:', JSON.stringify({
+            language: this.detectedLang,
+            kbQueries: this.recentKBQueries,
+            hasCatalogResult: !!this.lastKBResultText
+        }));
+
+        const MAX_REQUEST_CHARS = 11000; // ~2.7K tokens including system prompt and memory
         let keepFrom = Math.max(0, this.history.length - 1); // always keep the latest turn verbatim
-        let totalChars = systemPromptText.length + this.historyEntryText(this.history[this.history.length - 1] || {}).length;
+        let totalChars = systemPromptText.length + memoryBlock.length
+            + this.historyEntryText(this.history[this.history.length - 1] || {}).length;
         for (let i = this.history.length - 2; i >= 0; i--) {
             const len = this.historyEntryText(this.history[i]).length;
             if (totalChars + len > MAX_REQUEST_CHARS) break;
             totalChars += len;
             keepFrom = i;
         }
-        if (keepFrom > this.oaSummarizedCount && keepFrom > 0) {
-            const newExchanges: string[] = [];
-            for (let i = this.oaSummarizedCount; i < keepFrom; i++) {
-                const role = this.history[i].role === 'assistant' ? 'Assistant' : 'User';
-                const t = this.historyEntryText(this.history[i]).trim();
-                if (t) newExchanges.push(`${role}: ${t}`);
-            }
-            if (newExchanges.length) {
-                try {
-                    const merged = await this.summarizeExchange(this.oaSummaryText, newExchanges.join('\n'));
-                    if (merged) {
-                        this.oaSummaryText = merged;
-                        this.oaSummarizedCount = keepFrom;
-                        console.log('[Pipeline] Fallback memory summarized up to history entry', keepFrom);
-                    }
-                } catch (e: any) {
-                    console.error('[Pipeline] Summarization failed, continuing with existing summary:', e?.message || e);
-                }
-            } else {
-                this.oaSummarizedCount = keepFrom;
-            }
-        }
 
-        const messages: any[] = [{
-            role: 'system',
-            content: this.oaSummaryText
-                ? systemPromptText + '\n\nSummary of the earlier conversation (context, not verbatim):\n' + this.oaSummaryText
-                : systemPromptText
-        }];
+        const messages: any[] = [{ role: 'system', content: systemPromptText + memoryBlock }];
         for (let i = keepFrom; i < this.history.length; i++) {
             const msg = this.history[i];
             const msgText = this.historyEntryText(msg);
@@ -964,6 +939,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                         console.error('[Pipeline] OpenAI fallback KB error:', e);
                         resultText = 'Product catalog is temporarily unavailable.';
                     }
+                    this.rememberKB(searchQuery, resultText);
 
                     this.socket.emit('toolResult', {
                         toolUseId: toolCall.id,
