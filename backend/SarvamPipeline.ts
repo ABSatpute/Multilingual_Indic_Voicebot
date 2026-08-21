@@ -5,7 +5,7 @@ import { Socket } from 'socket.io';
 
 const KB_RESULT_MAX_CHARS = 2000;
 const MEMORY_QUERY_LIMIT = 3;
-const LLM_TIMEOUT_MS = 30000;
+const LLM_TIMEOUT_MS = 60000;
 const TTS_CHUNK_SIZE = 150;
 
 function getLanguageName(code: string): string {
@@ -878,7 +878,13 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
 
             const message = responseJson?.choices?.[0]?.message;
             if (!message) {
+                console.error('[Pipeline] Full OpenAI response:', JSON.stringify(responseJson).slice(0, 500));
                 throw new Error('No message output from OpenAI: ' + JSON.stringify(responseJson).slice(0, 300));
+            }
+
+            // Some reasoning models put text in reasoning or content may be null
+            if (!message.content && message.reasoning) {
+                message.content = message.reasoning;
             }
 
             if (Array.isArray(message.tool_calls) && message.tool_calls.length > 0) {
