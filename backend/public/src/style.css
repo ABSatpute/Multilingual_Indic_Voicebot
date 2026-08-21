@@ -1085,8 +1085,8 @@ html, body {
     transition: all 0.3s ease;
     z-index: 50;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-    opacity: 0;
-    visibility: hidden;
+    opacity: 1;
+    visibility: visible;
 }
 
 .keyboard-toggle.visible {

@@ -34,26 +34,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     let isTypingMode = false;
     
-    // Watch for voice button state to show/hide keyboard button
-    const observer = new MutationObserver(() => {
-        const isRecording = voiceBtn.classList.contains('active');
-        keyboardToggle.classList.toggle('visible', isRecording);
-        
-        if (!isRecording && isTypingMode) {
-            toggleTypingWindow();
-        }
-    });
-    
-    observer.observe(voiceBtn, {
-        attributes: true,
-        attributeFilter: ['class']
-    });
-    
-    // Check initial state in case voice button is already active
-    if (voiceBtn.classList.contains('active')) {
-        keyboardToggle.classList.add('visible');
-    }
-    
     function toggleTypingWindow() {
         isTypingMode = !isTypingMode;
         typingWindow.classList.toggle('hidden', !isTypingMode);
