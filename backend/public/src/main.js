@@ -1424,7 +1424,6 @@ async function startStreaming() {
 
     } catch (error) {
         console.error("Error starting recording:", error);
-        showToast('error', 'Could not start', friendlyServerError(error));
         isStreaming = false;
         voiceBtn.classList.remove('active');
         micIcon.classList.remove('hidden');
