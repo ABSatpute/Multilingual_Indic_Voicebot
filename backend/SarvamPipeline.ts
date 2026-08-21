@@ -1,6 +1,6 @@
 ﻿import { SarvamAIClient } from 'sarvamai';
 import { BedrockRuntimeClient, ConverseCommand } from '@aws-sdk/client-bedrock-runtime';
-import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand } from '@aws-sdk/client-bedrock-agent-runtime';
+import { BedrockAgentRuntimeClient, RetrieveAndGenerateCommand, RetrieveCommand } from '@aws-sdk/client-bedrock-agent-runtime';
 import { Socket } from 'socket.io';
 
 const KB_RESULT_MAX_CHARS = 2000;
@@ -665,14 +665,17 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
     private async searchKnowledgeBase(query: string): Promise<string> {
         for (let attempt = 0; attempt < 3; attempt++) {
             try {
-                const kb = await this.bedrockAgent.send(new RetrieveAndGenerateCommand({
-                    input: { text: query },
-                    retrieveAndGenerateConfiguration: { type: 'KNOWLEDGE_BASE', knowledgeBaseConfiguration: {
-                        knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '', modelArn: process.env.KB_MODEL_ARN || '',
-                        retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
-                    }}
+                const kb = await this.bedrockAgent.send(new RetrieveCommand({
+                    knowledgeBaseId: process.env.KB_KNOWLEDGE_BASE_ID || '',
+                    retrievalQuery: { text: query },
+                    retrievalConfiguration: { vectorSearchConfiguration: { numberOfResults: 3 } }
                 }));
-                let resultText = kb.output?.text || 'No results found.';
+                const results = kb.retrievalResults || [];
+                if (results.length === 0) return 'No results found.';
+                const texts = results
+                    .map(r => r.content?.text || '')
+                    .filter(t => t.length > 0);
+                let resultText = texts.join('\n\n');
                 if (resultText.length > KB_RESULT_MAX_CHARS) {
                     resultText = resultText.slice(0, KB_RESULT_MAX_CHARS);
                 }
