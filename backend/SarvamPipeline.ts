@@ -801,7 +801,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             hasCatalogResult: !!this.lastKBResultText
         }));
 
-        const MAX_REQUEST_CHARS = 11000; // ~2.7K tokens including system prompt and memory
+        const MAX_REQUEST_CHARS = 18000; // ~4.5K tokens including system prompt and memory
         let keepFrom = Math.max(0, this.history.length - 1); // always keep the latest turn verbatim
         let totalChars = systemPromptText.length + memoryBlock.length
             + this.historyEntryText(this.history[this.history.length - 1] || {}).length;
@@ -811,6 +811,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             totalChars += len;
             keepFrom = i;
         }
+        console.log(`[Pipeline] History budget: keepFrom=${keepFrom}/${this.history.length}, totalChars=${totalChars}, systemPrompt=${systemPromptText.length}, memory=${memoryBlock.length}`);
 
         const messages: any[] = [{ role: 'system', content: systemPromptText + memoryBlock }];
         for (let i = keepFrom; i < this.history.length; i++) {
@@ -820,6 +821,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                 messages.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msgText });
             }
         }
+        console.log(`[Pipeline] OpenAI messages count: ${messages.length}, roles: ${messages.map(m => m.role).join(', ')}`);
 
         const tools = this.enabledTools.includes('search_knowledge_base') ? [
             {
