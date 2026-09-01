@@ -26,6 +26,25 @@ function getLanguageName(code: string): string {
     return codes[code.toLowerCase()] || code;
 }
 
+// Classify pipeline/provider errors (AWS throttling, daily quotas, upstream outages)
+// so the frontend receives a clear, human-readable message instead of raw error JSON.
+function classifyPipelineError(error: any): { code: string; friendly: string } {
+    const raw = String(error?.message || error?.name || error);
+    if (/too many tokens|daily|quota|ThrottlingException/i.test(raw)) {
+        return { code: 'QUOTA_EXHAUSTED', friendly: 'Daily AI quota exhausted. This account is on the free tier — please try again tomorrow.' };
+    }
+    if (/rate.?limit|request rate is too high|429|TooManyRequests/i.test(raw)) {
+        return { code: 'RATE_LIMIT', friendly: 'AI service is rate-limited. Please try again in a moment.' };
+    }
+    if (/overload|502|503|upstream|service temporarily/i.test(raw)) {
+        return { code: 'PROVIDER_OVERLOADED', friendly: 'AI provider is temporarily overloaded. Please try again shortly.' };
+    }
+    if (/insufficient_quota|402|no credits|invalid_request/i.test(raw)) {
+        return { code: 'INVALID_REQUEST', friendly: 'Speech service error (invalid request or credits). Please contact support.' };
+    }
+    return { code: 'UNKNOWN', friendly: 'The service is temporarily unavailable. Please try again shortly.' };
+}
+
 // Map legacy UI voice IDs to Sarvam SDK speakers (bulbul:v3)
 // bulbul:v3 uses the UI voice names directly (priya, neha, kavya, anand, rahul, shubh)
 const SDK_SPEAKER_MAP: Record<string, string> = {
@@ -400,7 +419,14 @@ export class UnifiedPipeline {
             await this.speak(reply, this.detectedLang, currentTurn);
         } catch (error) {
             console.error('[Sarvam] STT/pipeline error:', error);
-            this.socket.emit('error', { message: 'Sarvam processing failed', details: String(error) });
+            const classified = classifyPipelineError(error);
+            this.socket.emit('error', { message: 'service_error', code: classified.code, details: classified.friendly });
+            if (!this.textOnly && this.turnCounter === currentTurn) {
+                await this.speak(this.fallbackApology(), this.detectedLang, currentTurn).catch(() => {});
+            } else {
+                this.socket.emit('textOutput', { role: 'assistant', content: this.fallbackApology() });
+            }
+            this.socket.emit('sarvamDone');
         }
     }
 
@@ -426,7 +452,13 @@ export class UnifiedPipeline {
             await this.speak(reply, this.detectedLang, currentTurn);
         } catch (error) {
             console.error('[Sarvam] Text pipeline error:', error);
-            this.socket.emit('error', { message: 'Sarvam text processing failed', details: String(error) });
+            const classified = classifyPipelineError(error);
+            this.socket.emit('error', { message: 'service_error', code: classified.code, details: classified.friendly });
+            if (this.textOnly) {
+                this.socket.emit('textOutput', { role: 'assistant', content: this.fallbackApology() });
+                this.socket.emit('contentEnd', { type: 'TEXT' });
+            }
+            this.socket.emit('sarvamDone');
         }
     }
 
@@ -891,6 +923,12 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             responseJson = await response.json();
             } finally {
                 clearTimeout(timer);
+            }
+
+            // OpenRouter/Azure-style providers return HTTP 200 with an error body
+            if (responseJson?.error) {
+                console.error('[Pipeline] Fallback provider returned error payload:', JSON.stringify(responseJson).slice(0, 300));
+                throw new Error(responseJson.error?.message || JSON.stringify(responseJson.error));
             }
 
             console.log('[Pipeline] OpenAI response keys:', Object.keys(responseJson || {}));
