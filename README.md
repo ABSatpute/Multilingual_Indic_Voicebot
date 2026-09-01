@@ -141,7 +141,7 @@ The conversational flow operates sequentially through several distinct AI models
 4. **Speech Synthesis (Text-to-Speech / TTS):**
    * **Model:** Sarvam AI `bulbul:v3`
    * **Process:** The final stripped response text is sent to the TTS API. 
-   * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) — internally mapped to Sarvam SDK speaker IDs (`anushka`, `abhilash`, `karun`, etc.) — to synthesize raw speech PCM files, streaming them immediately back to the browser.
+   * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) — matched to the Sarvam `bulbul:v3` speaker IDs of the same name — to synthesize raw speech PCM files, streaming them immediately back to the browser.
 
 ---
 

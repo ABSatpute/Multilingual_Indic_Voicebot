@@ -27,13 +27,14 @@ function getLanguageName(code: string): string {
 }
 
 // Map legacy UI voice IDs to Sarvam SDK speakers (bulbul:v3)
+// bulbul:v3 uses the UI voice names directly (priya, neha, kavya, anand, rahul, shubh)
 const SDK_SPEAKER_MAP: Record<string, string> = {
-    'priya': 'anushka',
-    'neha': 'manisha',
-    'kavya': 'vidya',
-    'anand': 'abhilash',
-    'rahul': 'karun',
-    'shubh': 'hitesh'
+    'priya': 'priya',
+    'neha': 'neha',
+    'kavya': 'kavya',
+    'anand': 'anand',
+    'rahul': 'rahul',
+    'shubh': 'shubh'
 };
 
 function addWavHeader(pcmBuffer: Buffer, sampleRate: number): Buffer {
@@ -968,7 +969,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
             
             console.log(`[Pipeline] Speak chunks count: ${chunks.length} for language: ${lang}`);
             
-            const speaker = SDK_SPEAKER_MAP[this.voiceId?.toLowerCase()] || 'anushka';
+            const speaker = SDK_SPEAKER_MAP[this.voiceId?.toLowerCase()] || 'priya';
             
             // Map chunks to API calls to pre-load/fetch in parallel for zero latency gap
             const convertPromises = chunks.map(chunk => 
