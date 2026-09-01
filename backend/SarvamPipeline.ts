@@ -26,7 +26,7 @@ function getLanguageName(code: string): string {
     return codes[code.toLowerCase()] || code;
 }
 
-// Map legacy UI voice IDs to Sarvam SDK speakers (bulbul:v2)
+// Map legacy UI voice IDs to Sarvam SDK speakers (bulbul:v3)
 const SDK_SPEAKER_MAP: Record<string, string> = {
     'priya': 'anushka',
     'neha': 'manisha',
@@ -976,7 +976,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                     text: chunk,
                     target_language_code: lang,
                     speaker,
-                    model: process.env.SARVAM_TTS_MODEL || 'bulbul:v2',
+                    model: process.env.SARVAM_TTS_MODEL || 'bulbul:v3',
                     output_audio_codec: 'linear16',
                     speech_sample_rate: this.speechSampleRate,
                 })

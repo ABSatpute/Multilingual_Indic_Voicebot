@@ -102,7 +102,7 @@ Designing low-latency voice AI assistants requires solving distinct networking a
 |---|---|
 | **Programming Languages** | TypeScript (Backend / Node.js v22), ES6 JavaScript (Client), Python (AWS CDK) |
 | **Backend Framework** | Express + Socket.io (Low-latency WebSockets) |
-| **Speech APIs** | **Sarvam AI** (`saaras:v3` for STT, `bulbul:v2` for TTS) |
+| **Speech APIs** | **Sarvam AI** (`saaras:v3` for STT, `bulbul:v3` for TTS) |
 | **LLM & RAG** | Amazon Bedrock (`apac.amazon.nova-pro-v1:0` for LLM, `apac.amazon.nova-micro-v1:0` for Knowledge Base queries) |
 | **Client Frontend** | Vanilla HTML5 Canvas (Waveform rendering) + Web Audio API (PCM streaming) |
 | **Infrastructure (IaC)** | AWS CDK (Python) for full stack; single-EC2 helpers for cost-efficient deployment |
@@ -139,7 +139,7 @@ The conversational flow operates sequentially through several distinct AI models
    * **Process:** When Bedrock identifies a technical product-specs query, it triggers a `search_knowledge_base` tool call. The backend halts text generation, runs a `RetrieveAndGenerate` query against the product catalog in the Bedrock Knowledge Base (capped at 2000 chars), returns the results to the LLM as tool output, and the LLM synthesizes a factual spoken answer.
 
 4. **Speech Synthesis (Text-to-Speech / TTS):**
-   * **Model:** Sarvam AI `bulbul:v2`
+   * **Model:** Sarvam AI `bulbul:v3`
    * **Process:** The final stripped response text is sent to the TTS API. 
    * **Voice Modeling:** The backend sets `target_language_code` dynamically to align with the detected locale (e.g., Tamil). It applies the speaker identity settings selected in the UI (e.g., `priya`, `anand`, `rahul`) — internally mapped to Sarvam SDK speaker IDs (`anushka`, `abhilash`, `karun`, etc.) — to synthesize raw speech PCM files, streaming them immediately back to the browser.
 
@@ -244,7 +244,7 @@ Create a `.env` file in **both** the project's root folder and the `backend/` fo
 | `LLM_MODEL` | Main conversational model for dialogue. | `apac.amazon.nova-pro-v1:0`| No |
 | `SARVAM_API_KEY` | Subscription API key from Sarvam Dashboard. | `sk_your_key_here` | **Yes** |
 | `SARVAM_STT_MODEL` | Transcription model identifier. | `saaras:v3` | No |
-| `SARVAM_TTS_MODEL` | Speech synthesis model identifier. | `bulbul:v2` | No |
+| `SARVAM_TTS_MODEL` | Speech synthesis model identifier. | `bulbul:v3` | No |
 | `PORT` | Local server execution port. | `3000` | No |
 | `HOST` | Network binding host address. | `0.0.0.0` | No |
 | `ALLOWED_ORIGINS` | Allowed CORS request domains. | `*` | No |
