@@ -420,12 +420,12 @@ export class UnifiedPipeline {
         } catch (error) {
             console.error('[Sarvam] STT/pipeline error:', error);
             const classified = classifyPipelineError(error);
-            this.socket.emit('error', { message: 'service_error', code: classified.code, details: classified.friendly });
             if (!this.textOnly && this.turnCounter === currentTurn) {
                 await this.speak(this.fallbackApology(), this.detectedLang, currentTurn).catch(() => {});
             } else {
                 this.socket.emit('textOutput', { role: 'assistant', content: this.fallbackApology() });
             }
+            this.socket.emit('error', { message: 'service_error', code: classified.code, details: classified.friendly });
             this.socket.emit('sarvamDone');
         }
     }
@@ -891,7 +891,7 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
 
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
-            let responseJson: any;
+            let responseJson: any = null;
             try {
                 let response: any = null;
                 for (let attempt = 0; attempt < 2; attempt++) {
@@ -905,13 +905,26 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                         body: JSON.stringify(body),
                         signal: controller.signal
                     });
-                    if (response.ok) break;
-                    if (response.status === 429 && attempt === 0) {
-                        const retryAfterSec = parseFloat(response.headers.get('retry-after') || '') || 0;
-                        const waitMs = Math.min(Math.max(retryAfterSec * 1000, 3000), 15000);
-                        console.log(`[Pipeline] Fallback provider rate limited, retrying in ${Math.round(waitMs / 1000)}s`);
-                        await new Promise(r => setTimeout(r, waitMs));
-                        continue;
+                    if (!response.ok) {
+                        if (response.status === 429 && attempt === 0) {
+                            const retryAfterSec = parseFloat(response.headers.get('retry-after') || '') || 0;
+                            const waitMs = Math.min(Math.max(retryAfterSec * 1000, 3000), 15000);
+                            console.log(`[Pipeline] Fallback provider rate limited, retrying in ${Math.round(waitMs / 1000)}s`);
+                            await new Promise(r => setTimeout(r, waitMs));
+                            continue;
+                        }
+                        break;
+                    }
+                    responseJson = await response.json();
+                    // OpenRouter/Azure-style providers return HTTP 200 with an error body
+                    if (responseJson?.error) {
+                        console.error('[Pipeline] Fallback provider returned error payload:', JSON.stringify(responseJson).slice(0, 300));
+                        if (attempt === 0) {
+                            const waitMs = 3000;
+                            console.log(`[Pipeline] Transient fallback error, retrying in ${Math.round(waitMs / 1000)}s`);
+                            await new Promise(r => setTimeout(r, waitMs));
+                            continue;
+                        }
                     }
                     break;
                 }
@@ -920,14 +933,12 @@ You MUST reply in the same language that the user spoke in (e.g. if user speaks 
                     console.error('[Pipeline] Fallback provider failed:', response?.status, errorText.slice(0, 200));
                     return this.fallbackApology();
                 }
-            responseJson = await response.json();
             } finally {
                 clearTimeout(timer);
             }
 
-            // OpenRouter/Azure-style providers return HTTP 200 with an error body
+            // Throw provider error-body failures so the pipeline can speak a friendly apology
             if (responseJson?.error) {
-                console.error('[Pipeline] Fallback provider returned error payload:', JSON.stringify(responseJson).slice(0, 300));
                 throw new Error(responseJson.error?.message || JSON.stringify(responseJson.error));
             }
 
